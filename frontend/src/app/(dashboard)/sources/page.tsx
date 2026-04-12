@@ -31,8 +31,6 @@ export default function SourcesPage() {
     setSources(data)
   }
 
-  useEffect(() => { loadSources() }, [])
-
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
@@ -51,6 +49,21 @@ export default function SourcesPage() {
     }
     setLoading(false)
   }
+
+  async function handleScrape(sourceId: string) {
+    const token = await getToken()
+    try {
+      const result = await apiFetch(`/sources/${sourceId}/scrape`, token, {
+        method: 'POST',
+      })
+      alert(`Scraping terminé — ${result.articles_added} articles ajoutés`)
+      await loadSources()
+    } catch {
+      alert('Erreur lors du scraping')
+    }
+  }
+
+  useEffect(() => { loadSources() }, [])
 
   return (
     <div className="flex flex-col gap-8">
@@ -103,9 +116,17 @@ export default function SourcesPage() {
               <p className="font-medium text-gray-900">{source.name || 'Sans nom'}</p>
               <p className="text-sm text-gray-400">{source.url}</p>
             </div>
-            <span className="text-xs bg-gray-100 text-gray-500 px-3 py-1 rounded-full">
-              {source.status}
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs bg-gray-100 text-gray-500 px-3 py-1 rounded-full">
+                {source.status}
+              </span>
+              <button
+                onClick={() => handleScrape(source.id)}
+                className="text-xs bg-indigo-600 text-white px-3 py-1 rounded-full hover:bg-indigo-700 transition"
+              >
+                Scraper
+              </button>
+            </div>
           </div>
         ))}
       </div>
