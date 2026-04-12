@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import sources
+from app.routers import sources, articles
 
 app = FastAPI(title="Klark API", version="1.0.0")
 
@@ -13,6 +13,7 @@ app.add_middleware(
 )
 
 app.include_router(sources.router)
+app.include_router(articles.router)
 
 @app.get("/health")
 def health():
