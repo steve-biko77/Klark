@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase'
+import { getToken } from '@/lib/auth'
 import { apiFetch } from '@/lib/api'
 
 type Source = {
@@ -18,15 +18,9 @@ export default function SourcesPage() {
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const supabase = createClient()
-
-  async function getToken() {
-    const { data } = await supabase.auth.getSession()
-    return data.session?.access_token ?? ''
-  }
 
   async function loadSources() {
-    const token = await getToken()
+    const token = getToken()
     const data = await apiFetch('/sources/', token)
     setSources(data)
   }
@@ -36,7 +30,7 @@ export default function SourcesPage() {
     setLoading(true)
     setError('')
     try {
-      const token = await getToken()
+      const token = getToken()
       await apiFetch('/sources/', token, {
         method: 'POST',
         body: JSON.stringify({ url, name }),
@@ -51,9 +45,9 @@ export default function SourcesPage() {
   }
 
   async function handleScrape(sourceId: string) {
-    const token = await getToken()
+    const token = getToken()
     try {
-      const result = await apiFetch(`/sources/${sourceId}/scrape`, token, {
+      const result = await apiFetch(`/sources/${sourceId}/scrape/`, token, {
         method: 'POST',
       })
       alert(`Scraping terminé — ${result.articles_added} articles ajoutés`)

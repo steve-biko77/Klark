@@ -3,13 +3,12 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase'
+import { login } from '@/lib/auth'
 
 export default function LoginPage() {
   const router = useRouter()
-  const supabase = createClient()
 
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -19,15 +18,13 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-
-    if (error) {
-      setError('Email ou mot de passe incorrect')
+    try {
+      await login(username, password)
+      router.push('/dashboard')
+    } catch {
+      setError('Nom d\'utilisateur ou mot de passe incorrect')
       setLoading(false)
-      return
     }
-
-    router.push('/dashboard')
   }
 
   return (
@@ -38,12 +35,12 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="flex flex-col gap-4">
           <div>
-            <label className="text-sm font-medium text-gray-700 mb-1 block">Email</label>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Nom d&apos;utilisateur</label>
             <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="toi@exemple.com"
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              placeholder="ton_pseudo"
               required
               className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
@@ -75,7 +72,7 @@ export default function LoginPage() {
         <p className="text-center text-sm text-gray-500 mt-6">
           Pas encore de compte ?{' '}
           <Link href="/register" className="text-indigo-600 hover:underline">
-            Sinscrire
+            S&apos;inscrire
           </Link>
         </p>
       </div>

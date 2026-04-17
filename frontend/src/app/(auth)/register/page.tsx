@@ -3,12 +3,12 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase'
+import { register } from '@/lib/auth'
 
 export default function RegisterPage() {
   const router = useRouter()
-  const supabase = createClient()
 
+  const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -19,15 +19,13 @@ export default function RegisterPage() {
     setLoading(true)
     setError('')
 
-    const { error } = await supabase.auth.signUp({ email, password })
-
-    if (error) {
-      setError(error.message)
+    try {
+      await register(username, email, password)
+      router.push('/dashboard')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur lors de la création du compte')
       setLoading(false)
-      return
     }
-
-    router.push('/dashboard')
   }
 
   return (
@@ -37,6 +35,18 @@ export default function RegisterPage() {
         <p className="text-gray-500 mb-8">Bienvenue sur Klark</p>
 
         <form onSubmit={handleRegister} className="flex flex-col gap-4">
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Nom d&apos;utilisateur</label>
+            <input
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              placeholder="ton_pseudo"
+              required
+              className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+
           <div>
             <label className="text-sm font-medium text-gray-700 mb-1 block">Email</label>
             <input

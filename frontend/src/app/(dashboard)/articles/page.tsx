@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase'
+import { getToken } from '@/lib/auth'
 import { apiFetch } from '@/lib/api'
 import { useRouter } from 'next/navigation'
 
@@ -18,16 +18,10 @@ type Article = {
 export default function ArticlesPage() {
   const [articles, setArticles] = useState<Article[]>([])
   const [loading, setLoading] = useState(true)
-  const supabase = createClient()
   const router = useRouter()
 
-  async function getToken() {
-    const { data } = await supabase.auth.getSession()
-    return data.session?.access_token ?? ''
-  }
-
   async function loadArticles() {
-    const token = await getToken()
+    const token = getToken()
     const data = await apiFetch('/articles/', token)
     setArticles(data)
     setLoading(false)

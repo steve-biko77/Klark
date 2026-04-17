@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase'
+import { logout } from '@/lib/auth'
 
 const navItems = [
   { label: 'Dashboard', href: '/dashboard' },
@@ -16,10 +16,9 @@ const navItems = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const supabase = createClient()
 
-  async function handleLogout() {
-    await supabase.auth.signOut()
+  function handleLogout() {
+    logout()
     router.push('/login')
   }
 

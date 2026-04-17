@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase'
+import { useState } from 'react'
+import { getToken } from '@/lib/auth'
 import { apiFetch } from '@/lib/api'
 import { useRouter, useSearchParams } from 'next/navigation'
 
@@ -10,21 +10,15 @@ export default function NewPostPage() {
   const [platform, setPlatform] = useState('linkedin')
   const [loading, setLoading] = useState(false)
   const [generated, setGenerated] = useState(false)
-  const supabase = createClient()
   const router = useRouter()
   const searchParams = useSearchParams()
   const article_id = searchParams.get('article_id')
 
-  async function getToken() {
-    const { data } = await supabase.auth.getSession()
-    return data.session?.access_token ?? ''
-  }
-
   async function handleGenerate() {
     setLoading(true)
     try {
-      const token = await getToken()
-      const result = await apiFetch('/posts/generate', token, {
+      const token = getToken()
+      const result = await apiFetch('/posts/generate/', token, {
         method: 'POST',
         body: JSON.stringify({ article_id, platform }),
       })

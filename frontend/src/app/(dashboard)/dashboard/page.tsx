@@ -1,23 +1,20 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase'
+import { getUsername } from '@/lib/auth'
 
 export default function DashboardPage() {
-  const [email, setEmail] = useState('')
-  const supabase = createClient()
+  const [username, setUsername] = useState('')
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) setEmail(data.user.email ?? '')
-    })
+    setUsername(getUsername())
   }, [])
 
   return (
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Bonjour 👋</h1>
-        <p className="text-gray-500 mt-1">{email}</p>
+        <p className="text-gray-500 mt-1">{username}</p>
       </div>
 
       <div className="grid grid-cols-3 gap-4">

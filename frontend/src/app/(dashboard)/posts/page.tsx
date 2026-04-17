@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase'
+import { getToken } from '@/lib/auth'
 import { apiFetch } from '@/lib/api'
 
 type Post = {
@@ -15,15 +15,9 @@ type Post = {
 export default function PostsPage() {
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
-  const supabase = createClient()
-
-  async function getToken() {
-    const { data } = await supabase.auth.getSession()
-    return data.session?.access_token ?? ''
-  }
 
   async function loadPosts() {
-    const token = await getToken()
+    const token = getToken()
     const data = await apiFetch('/posts/', token)
     setPosts(data)
     setLoading(false)
