@@ -14,6 +14,6 @@ urlpatterns = [
     path('health/', health, name='health'),
     path('auth/', include('apps.authentication.urls')),
     path('sources/', include('apps.sources.urls')),
-    # path('articles/', include('apps.articles.urls')),  # Task 7
+    path('articles/', include('apps.articles.urls')),  # Task 7
     # path('posts/', include('apps.posts.urls')),  # Task 8
 ]
