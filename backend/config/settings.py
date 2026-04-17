@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from decouple import config
 import dj_database_url
@@ -29,11 +30,19 @@ ROOT_URLCONF = 'config.urls'
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-DATABASES = {
-    'default': dj_database_url.config(
-        default=config('DATABASE_URL')
-    )
-}
+_TESTING = 'test' in sys.argv
+
+if _TESTING:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': ':memory:',
+        }
+    }
+else:
+    DATABASES = {
+        'default': dj_database_url.config(default=config('DATABASE_URL'))
+    }
 
 LANGUAGE_CODE = 'fr-fr'
 TIME_ZONE = 'UTC'
