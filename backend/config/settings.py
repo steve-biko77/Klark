@@ -13,7 +13,7 @@ ALLOWED_HOSTS = [h.strip() for h in config('ALLOWED_HOSTS', default='localhost,1
 INSTALLED_APPS = [
     'django.contrib.auth',
     'django.contrib.contenttypes',
-    'django.contrib.sessions',
+    'django.contrib.sessions',  # requis par Django TestCase internals
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework_simplejwt',
