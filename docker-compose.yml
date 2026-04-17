@@ -28,6 +28,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
     volumes:
       - ./backend:/app
 
@@ -35,7 +37,10 @@ services:
     build: ./workers
     env_file: ./backend/.env
     depends_on:
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
 volumes:
   postgres_data:
