@@ -10,7 +10,9 @@ PLATFORM_CHOICES = [
 
 STATUS_CHOICES = [
     ('draft', 'Brouillon'),
+    ('scheduled', 'Planifié'),
     ('published', 'Publié'),
+    ('failed', 'Échoué'),
 ]
 
 
@@ -20,6 +22,7 @@ class Post(models.Model):
     content = models.TextField()
     platform = models.TextField(choices=PLATFORM_CHOICES, default='linkedin')
     status = models.TextField(choices=STATUS_CHOICES, default='draft')
+    scheduled_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
