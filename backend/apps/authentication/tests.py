@@ -1,7 +1,12 @@
-from django.test import TestCase
+from unittest.mock import patch
+from datetime import timedelta
+
 from django.contrib.auth.models import User
+from django.utils import timezone
 from rest_framework.test import APITestCase
 from rest_framework import status
+
+from .models import OTPCode
 
 
 class RegisterViewTest(APITestCase):
@@ -24,16 +29,99 @@ class RegisterViewTest(APITestCase):
         response = self.client.post('/auth/register/', data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_login_returns_tokens(self):
+
+class LoginOTPViewTest(APITestCase):
+
+    @patch('apps.authentication.views.send_mail')
+    def test_login_sends_otp(self, mock_mail):
+        User.objects.create_user(username='testuser', email='test@example.com', password='StrongPass123!')
+        data = {'username': 'testuser', 'password': 'StrongPass123!'}
+        response = self.client.post('/auth/login/', data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'otp_sent')
+        self.assertIn('user_id', response.data)
+        self.assertIn('email', response.data)
+        self.assertTrue(mock_mail.called)
+
+    def test_login_without_email_returns_400(self):
         User.objects.create_user(username='testuser', password='StrongPass123!')
         data = {'username': 'testuser', 'password': 'StrongPass123!'}
         response = self.client.post('/auth/login/', data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_login_wrong_password(self):
+        User.objects.create_user(username='testuser', email='test@example.com', password='correct')
+        data = {'username': 'testuser', 'password': 'wrong'}
+        response = self.client.post('/auth/login/', data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
+class VerifyOTPViewTest(APITestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='testuser', email='test@example.com', password='pass')
+
+    def test_verify_valid_otp_returns_tokens(self):
+        otp = OTPCode.objects.create(
+            user=self.user, code='123456',
+            expires_at=timezone.now() + timedelta(minutes=10),
+        )
+        response = self.client.post('/auth/verify-otp/', {
+            'user_id': self.user.id, 'code': '123456',
+        }, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn('access', response.data)
         self.assertIn('refresh', response.data)
 
-    def test_login_wrong_password(self):
-        User.objects.create_user(username='testuser', password='correct')
-        data = {'username': 'testuser', 'password': 'wrong'}
-        response = self.client.post('/auth/login/', data, format='json')
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+    def test_verify_wrong_code(self):
+        OTPCode.objects.create(
+            user=self.user, code='123456',
+            expires_at=timezone.now() + timedelta(minutes=10),
+        )
+        response = self.client.post('/auth/verify-otp/', {
+            'user_id': self.user.id, 'code': '000000',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_verify_expired_otp(self):
+        OTPCode.objects.create(
+            user=self.user, code='123456',
+            expires_at=timezone.now() - timedelta(minutes=1),
+        )
+        response = self.client.post('/auth/verify-otp/', {
+            'user_id': self.user.id, 'code': '123456',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('expiré', response.data['error'])
+
+    def test_verify_already_used_otp(self):
+        OTPCode.objects.create(
+            user=self.user, code='123456',
+            expires_at=timezone.now() + timedelta(minutes=10),
+            used=True,
+        )
+        response = self.client.post('/auth/verify-otp/', {
+            'user_id': self.user.id, 'code': '123456',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class PasswordResetViewTest(APITestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='testuser', email='test@example.com', password='pass'
+        )
+
+    @patch('apps.authentication.views.send_mail')
+    def test_password_reset_request_existing_email(self, mock_mail):
+        response = self.client.post('/auth/password-reset/', {'email': 'test@example.com'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('message', response.data)
+        self.assertTrue(mock_mail.called)
+
+    @patch('apps.authentication.views.send_mail')
+    def test_password_reset_request_unknown_email(self, mock_mail):
+        response = self.client.post('/auth/password-reset/', {'email': 'unknown@example.com'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(mock_mail.called)
