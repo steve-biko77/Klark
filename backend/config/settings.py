@@ -110,3 +110,11 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 DEFAULT_FROM_EMAIL = 'noreply@klark.app'
 
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
+
+# LinkedIn OAuth
+LINKEDIN_CLIENT_ID = config('LINKEDIN_CLIENT_ID', default='mock')
+LINKEDIN_CLIENT_SECRET = config('LINKEDIN_CLIENT_SECRET', default='')
+LINKEDIN_REDIRECT_URI = config('LINKEDIN_REDIRECT_URI', default='http://localhost:8000/posts/linkedin/callback/')
+
+# Chiffrement Fernet — clé dev par défaut (32 octets nuls en base64), à changer en prod
+ENCRYPTION_KEY = config('ENCRYPTION_KEY', default='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=')

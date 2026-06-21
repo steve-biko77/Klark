@@ -30,3 +30,15 @@ class Post(models.Model):
 
     def __str__(self):
         return f"{self.platform} — {self.content[:50]}"
+
+
+class LinkedInToken(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='linkedin_token')
+    access_token = models.TextField()
+    token_type = models.TextField(default='Bearer')
+    expires_at = models.DateTimeField()
+    refresh_token = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"LinkedIn token — {self.user.username}"
