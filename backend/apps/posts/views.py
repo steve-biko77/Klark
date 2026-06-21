@@ -1,15 +1,25 @@
 import datetime
+import json
+import secrets
+import urllib.parse
+import urllib.request
 
+from django.conf import settings
+from django.contrib.auth.models import User
+from django.http import HttpResponseRedirect
 from django.utils import timezone
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework_simplejwt.tokens import UntypedToken
+from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.shortcuts import get_object_or_404
 
 from apps.articles.models import Article
-from .models import Post
+from .models import Post, LinkedInToken
 from .serializers import PostSerializer
 from .services import generate_post
+from .encryption import encrypt
 
 
 class PostListView(APIView):
@@ -104,3 +114,141 @@ class PostScheduleView(APIView):
         post.save()
 
         return Response(PostSerializer(post).data)
+
+
+# ── LinkedIn OAuth ──────────────────────────────────────────────────────────
+
+class LinkedInAuthView(APIView):
+    """
+    GET /posts/linkedin/auth/?token=<jwt>
+    Redirige vers l'URL d'autorisation LinkedIn.
+    Le JWT est passé en query param car la vue est atteinte via navigation navigateur
+    (window.location.href), pas via fetch avec Authorization header.
+    En mode mock (LINKEDIN_CLIENT_ID=mock), redirige directement vers le callback.
+    """
+    permission_classes = []
+    authentication_classes = []
+
+    def get(self, request):
+        jwt_token = request.query_params.get('token', '')
+
+        try:
+            validated = UntypedToken(jwt_token)
+            user_id = validated.get('user_id')
+            if not user_id:
+                raise TokenError('No user_id in token')
+        except (InvalidToken, TokenError, Exception):
+            return Response({'error': 'Token invalide'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        client_id = settings.LINKEDIN_CLIENT_ID
+        state = f"{user_id}:{secrets.token_urlsafe(16)}"
+
+        if client_id == 'mock':
+            callback_url = (
+                f"{settings.LINKEDIN_REDIRECT_URI}"
+                f"?code=mock&state={urllib.parse.quote(state)}"
+            )
+            return HttpResponseRedirect(callback_url)
+
+        params = urllib.parse.urlencode({
+            'response_type': 'code',
+            'client_id': client_id,
+            'redirect_uri': settings.LINKEDIN_REDIRECT_URI,
+            'scope': 'openid profile email w_member_social',
+            'state': state,
+        })
+        return HttpResponseRedirect(f'https://www.linkedin.com/oauth/v2/authorization?{params}')
+
+
+class LinkedInCallbackView(APIView):
+    """
+    GET /posts/linkedin/callback/?code=<code>&state=<user_id:nonce>
+    Échange le code contre un access_token, chiffre et stocke.
+    Redirige vers le frontend /settings?linkedin=connected (ou =error).
+    """
+    permission_classes = []
+    authentication_classes = []
+
+    def get(self, request):
+        code = request.query_params.get('code')
+        state = request.query_params.get('state', '')
+        error_url = f'{settings.FRONTEND_URL}/settings?linkedin=error'
+
+        if not code or not state:
+            return HttpResponseRedirect(error_url)
+
+        try:
+            user_id = int(state.split(':')[0])
+            user = User.objects.get(id=user_id)
+        except (ValueError, IndexError, User.DoesNotExist):
+            return HttpResponseRedirect(error_url)
+
+        try:
+            if code == 'mock':
+                expires_at = timezone.now() + datetime.timedelta(days=60)
+                LinkedInToken.objects.update_or_create(
+                    user=user,
+                    defaults={
+                        'access_token': encrypt('mock_access_token_klark_123'),
+                        'token_type': 'Bearer',
+                        'expires_at': expires_at,
+                        'refresh_token': None,
+                    },
+                )
+            else:
+                data = urllib.parse.urlencode({
+                    'grant_type': 'authorization_code',
+                    'code': code,
+                    'redirect_uri': settings.LINKEDIN_REDIRECT_URI,
+                    'client_id': settings.LINKEDIN_CLIENT_ID,
+                    'client_secret': settings.LINKEDIN_CLIENT_SECRET,
+                }).encode()
+
+                req = urllib.request.Request(
+                    'https://www.linkedin.com/oauth/v2/accessToken',
+                    data=data,
+                    headers={'Content-Type': 'application/x-www-form-urlencoded'},
+                )
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    token_data = json.loads(resp.read())
+
+                expires_at = timezone.now() + datetime.timedelta(
+                    seconds=token_data.get('expires_in', 5_184_000)
+                )
+                refresh = token_data.get('refresh_token')
+                LinkedInToken.objects.update_or_create(
+                    user=user,
+                    defaults={
+                        'access_token': encrypt(token_data['access_token']),
+                        'token_type': token_data.get('token_type', 'Bearer'),
+                        'expires_at': expires_at,
+                        'refresh_token': encrypt(refresh) if refresh else None,
+                    },
+                )
+        except Exception:
+            return HttpResponseRedirect(error_url)
+
+        return HttpResponseRedirect(f'{settings.FRONTEND_URL}/settings?linkedin=connected')
+
+
+class LinkedInStatusView(APIView):
+
+    def get(self, request):
+        try:
+            token = request.user.linkedin_token
+            return Response({
+                'connected': True,
+                'expires_at': token.expires_at.isoformat(),
+            })
+        except LinkedInToken.DoesNotExist:
+            return Response({'connected': False, 'expires_at': None})
+
+
+class LinkedInDisconnectView(APIView):
+
+    def delete(self, request):
+        try:
+            request.user.linkedin_token.delete()
+        except LinkedInToken.DoesNotExist:
+            pass
+        return Response({'disconnected': True})
