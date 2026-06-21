@@ -47,13 +47,25 @@ export default function SourcesPage() {
   async function handleScrape(sourceId: string) {
     const token = getToken()
     try {
-      const result = await apiFetch(`/sources/${sourceId}/scrape/`, token, {
-        method: 'POST',
-      })
-      alert(`Scraping terminé — ${result.articles_added} articles ajoutés`)
+      const result = await apiFetch(`/sources/${sourceId}/scrape/`, token, { method: 'POST' })
+      alert(`Scraping terminé — ${result.articles_added} article${result.articles_added > 1 ? 's' : ''} ajouté${result.articles_added > 1 ? 's' : ''}`)
       await loadSources()
     } catch {
       alert('Erreur lors du scraping')
+    }
+  }
+
+  async function handleDelete(sourceId: string) {
+    if (!confirm('Supprimer cette source et tous ses articles ?')) return
+    const token = getToken()
+    try {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'}/sources/${sourceId}/`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      setSources(prev => prev.filter(s => s.id !== sourceId))
+    } catch {
+      alert('Erreur lors de la suppression')
     }
   }
 
@@ -102,10 +114,13 @@ export default function SourcesPage() {
 
       <div className="flex flex-col gap-3">
         {sources.length === 0 && (
-          <p className="text-gray-400 text-sm">Aucune source pour l'instant.</p>
+          <p className="text-gray-400 text-sm">Aucune source pour l&apos;instant.</p>
         )}
         {sources.map(source => (
-          <div key={source.id} className="bg-white rounded-xl p-4 border border-gray-100 flex items-center justify-between">
+          <div
+            key={source.id}
+            className="bg-white rounded-xl p-4 border border-gray-100 flex items-center justify-between"
+          >
             <div>
               <p className="font-medium text-gray-900">{source.name || 'Sans nom'}</p>
               <p className="text-sm text-gray-400">{source.url}</p>
@@ -119,6 +134,12 @@ export default function SourcesPage() {
                 className="text-xs bg-indigo-600 text-white px-3 py-1 rounded-full hover:bg-indigo-700 transition"
               >
                 Scraper
+              </button>
+              <button
+                onClick={() => handleDelete(source.id)}
+                className="text-xs bg-red-50 text-red-500 px-3 py-1 rounded-full hover:bg-red-100 transition"
+              >
+                Supprimer
               </button>
             </div>
           </div>

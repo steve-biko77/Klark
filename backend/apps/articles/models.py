@@ -8,7 +8,7 @@ class Article(models.Model):
     content = models.TextField(blank=True, default='')
     url = models.TextField(blank=True, default='')
     score = models.FloatField(default=0.0)
-    published_at = models.TextField(null=True, blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

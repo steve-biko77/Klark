@@ -19,6 +19,13 @@ class PostListView(APIView):
         return Response(PostSerializer(posts, many=True).data)
 
 
+class PostDetailView(APIView):
+
+    def get(self, request, post_id):
+        post = get_object_or_404(Post, id=post_id, user=request.user)
+        return Response(PostSerializer(post).data)
+
+
 class PostGenerateView(APIView):
 
     def post(self, request):

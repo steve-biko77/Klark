@@ -1,7 +1,21 @@
-import feedparser
+import calendar
 from datetime import datetime, timezone
+
+import feedparser
+
 from apps.articles.models import Article
 from .models import Source
+
+
+def _parse_published(entry) -> datetime | None:
+    """Convertit published_parsed (struct_time) en datetime UTC, ou None."""
+    parsed = entry.get('published_parsed')
+    if parsed:
+        try:
+            return datetime.utcfromtimestamp(calendar.timegm(parsed)).replace(tzinfo=timezone.utc)
+        except Exception:
+            pass
+    return None
 
 
 def scrape_source(source: Source) -> dict:
@@ -23,7 +37,7 @@ def scrape_source(source: Source) -> dict:
             content=entry.get('summary', entry.get('description', '')),
             url=link,
             score=0.0,
-            published_at=entry.get('published', None),
+            published_at=_parse_published(entry),
         )
         articles_added += 1
 

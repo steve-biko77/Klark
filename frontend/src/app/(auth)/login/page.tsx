@@ -19,10 +19,12 @@ export default function LoginPage() {
     setError('')
 
     try {
-      await login(username, password)
-      router.push('/dashboard')
-    } catch {
-      setError('Nom d\'utilisateur ou mot de passe incorrect')
+      const data = await login(username, password)
+      router.push(
+        `/verify-otp?user_id=${data.user_id}&email=${encodeURIComponent(data.email)}&username=${encodeURIComponent(data.username)}`
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur de connexion')
       setLoading(false)
     }
   }
@@ -35,7 +37,9 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="flex flex-col gap-4">
           <div>
-            <label className="text-sm font-medium text-gray-700 mb-1 block">Nom d&apos;utilisateur</label>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">
+              Nom d&apos;utilisateur
+            </label>
             <input
               type="text"
               value={username}
@@ -65,16 +69,21 @@ export default function LoginPage() {
             disabled={loading}
             className="bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50"
           >
-            {loading ? 'Connexion...' : 'Se connecter'}
+            {loading ? 'Vérification...' : 'Se connecter'}
           </button>
         </form>
 
-        <p className="text-center text-sm text-gray-500 mt-6">
-          Pas encore de compte ?{' '}
-          <Link href="/register" className="text-indigo-600 hover:underline">
-            S&apos;inscrire
+        <div className="mt-6 flex flex-col gap-3 text-center text-sm text-gray-500">
+          <Link href="/forgot-password" className="text-indigo-600 hover:underline">
+            Mot de passe oublié ?
           </Link>
-        </p>
+          <span>
+            Pas encore de compte ?{' '}
+            <Link href="/register" className="text-indigo-600 hover:underline">
+              S&apos;inscrire
+            </Link>
+          </span>
+        </div>
       </div>
     </div>
   )
