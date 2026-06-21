@@ -1,9 +1,24 @@
+import random
+from datetime import timedelta
+
+from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.core.mail import send_mail
+from django.conf import settings
+from django.utils import timezone
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework_simplejwt.tokens import RefreshToken
+
+from apps.articles.models import Article
+from apps.posts.models import Post
+from apps.sources.models import Source
+from .models import OTPCode
 from .serializers import RegisterSerializer
 
 
@@ -20,3 +35,189 @@ class RegisterView(APIView):
                 'refresh': str(refresh),
             }, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class LoginView(APIView):
+    """Connexion avec 2FA par email — retourne un OTP au lieu des tokens."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        username = request.data.get('username', '')
+        password = request.data.get('password', '')
+
+        user = authenticate(request, username=username, password=password)
+        if user is None:
+            return Response({'error': 'Identifiants invalides'}, status=status.HTTP_401_UNAUTHORIZED)
+
+        if not user.email:
+            return Response(
+                {'error': 'Aucune adresse email associée à ce compte. Impossible d\'envoyer le code 2FA.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        expires_at = timezone.now() + timedelta(minutes=10)
+
+        OTPCode.objects.filter(user=user).delete()
+        OTPCode.objects.create(user=user, code=code, expires_at=expires_at)
+
+        send_mail(
+            subject='Votre code de connexion Klark',
+            message=(
+                f'Bonjour {user.username},\n\n'
+                f'Votre code de connexion est : {code}\n\n'
+                f'Ce code expire dans 10 minutes.\n'
+                f'Si vous n\'avez pas demandé ce code, ignorez cet email.'
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+        )
+
+        return Response({
+            'status': 'otp_sent',
+            'user_id': user.id,
+            'email': user.email,
+            'username': user.username,
+        })
+
+
+class VerifyOTPView(APIView):
+    """Vérifie le code OTP et retourne les tokens JWT."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        user_id = request.data.get('user_id')
+        code = request.data.get('code', '').strip()
+
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({'error': 'Utilisateur non trouvé'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            otp = OTPCode.objects.get(user=user, code=code, used=False)
+        except OTPCode.DoesNotExist:
+            return Response({'error': 'Code invalide'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if otp.expires_at < timezone.now():
+            return Response({'error': 'Code expiré — demandez un nouveau code'}, status=status.HTTP_400_BAD_REQUEST)
+
+        otp.used = True
+        otp.save()
+
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'access': str(refresh.access_token),
+            'refresh': str(refresh),
+            'username': user.username,
+        })
+
+
+class ResendOTPView(APIView):
+    """Renvoie un nouveau code OTP à l'utilisateur."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        user_id = request.data.get('user_id')
+
+        try:
+            user = User.objects.get(id=user_id)
+        except User.DoesNotExist:
+            return Response({'error': 'Utilisateur non trouvé'}, status=status.HTTP_400_BAD_REQUEST)
+
+        code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        expires_at = timezone.now() + timedelta(minutes=10)
+
+        OTPCode.objects.filter(user=user).delete()
+        OTPCode.objects.create(user=user, code=code, expires_at=expires_at)
+
+        send_mail(
+            subject='Votre nouveau code de connexion Klark',
+            message=(
+                f'Bonjour {user.username},\n\n'
+                f'Votre nouveau code de connexion est : {code}\n\n'
+                f'Ce code expire dans 10 minutes.'
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+        )
+
+        return Response({'status': 'otp_sent'})
+
+
+class PasswordResetRequestView(APIView):
+    """Envoie un lien de réinitialisation de mot de passe par email."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        email = request.data.get('email', '').strip()
+        # Même réponse que l'email existe ou non (sécurité)
+        generic_response = Response({
+            'message': 'Si cette adresse email existe, vous recevrez un lien de réinitialisation.'
+        })
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return generic_response
+
+        token = PasswordResetTokenGenerator().make_token(user)
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        reset_link = f"{settings.FRONTEND_URL}/reset-password?uid={uid}&token={token}"
+
+        send_mail(
+            subject='Réinitialisation de votre mot de passe Klark',
+            message=(
+                f'Bonjour {user.username},\n\n'
+                f'Cliquez sur ce lien pour réinitialiser votre mot de passe :\n\n'
+                f'{reset_link}\n\n'
+                f'Ce lien expire dans 24 heures.\n'
+                f'Si vous n\'avez pas demandé cette réinitialisation, ignorez cet email.'
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[user.email],
+        )
+
+        return generic_response
+
+
+class PasswordResetConfirmView(APIView):
+    """Confirme le reset du mot de passe avec uid + token + nouveau mot de passe."""
+    permission_classes = [AllowAny]
+
+    def post(self, request):
+        uid = request.data.get('uid', '')
+        token = request.data.get('token', '')
+        new_password = request.data.get('new_password', '')
+
+        try:
+            user_pk = force_str(urlsafe_base64_decode(uid))
+            user = User.objects.get(pk=user_pk)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return Response({'error': 'Lien invalide'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not PasswordResetTokenGenerator().check_token(user, token):
+            return Response({'error': 'Lien invalide ou expiré'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if len(new_password) < 8:
+            return Response(
+                {'error': 'Le mot de passe doit contenir au moins 8 caractères'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(new_password)
+        user.save()
+
+        return Response({'message': 'Mot de passe réinitialisé avec succès'})
+
+
+class DashboardStatsView(APIView):
+    """Retourne les vrais stats de l'utilisateur connecté pour le dashboard."""
+
+    def get(self, request):
+        user = request.user
+        return Response({
+            'sources_actives': Source.objects.filter(user=user, status='active').count(),
+            'posts_generes': Post.objects.filter(user=user).count(),
+            'articles': Article.objects.filter(source__user=user).count(),
+        })
