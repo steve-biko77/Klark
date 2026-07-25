@@ -20,6 +20,14 @@ class ArticleListView(APIView):
         return Response(ArticleSerializer(articles, many=True).data)
 
 
+class ArticleDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, article_id):
+        article = get_object_or_404(Article, id=article_id, source__user=request.user)
+        return Response(ArticleSerializer(article).data)
+
+
 class AlertListCreateView(APIView):
     permission_classes = [IsAuthenticated]
 

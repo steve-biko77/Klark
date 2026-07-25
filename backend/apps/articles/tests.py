@@ -68,6 +68,36 @@ class ArticlesViewTest(APITestCase):
         self.assertLessEqual(len(article['excerpt']), 150)
 
 
+class ArticleDetailViewTest(APITestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='detailuser', password='pass')
+        self.client.force_authenticate(user=self.user)
+        self.source = Source.objects.create(user=self.user, url='https://example.com/rss', name='Ma Source')
+
+    def test_get_own_article(self):
+        article = Article.objects.create(
+            source=self.source, title='Titre', content='Contenu', url='https://a.com/1',
+        )
+        response = self.client.get(f'/articles/{article.id}/')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['title'], 'Titre')
+        self.assertEqual(response.data['source_name'], 'Ma Source')
+
+    def test_cannot_get_other_user_article(self):
+        other = User.objects.create_user(username='other3', password='pass')
+        other_source = Source.objects.create(user=other, url='https://other.com/rss')
+        article = Article.objects.create(source=other_source, title='Pas à moi', url='https://b.com')
+
+        response = self.client.get(f'/articles/{article.id}/')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_unauthenticated(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.get('/articles/1/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+
 class ParseScoreTest(APITestCase):
 
     def test_parses_plain_integer(self):

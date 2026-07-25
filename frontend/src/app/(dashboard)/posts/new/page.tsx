@@ -33,6 +33,12 @@ type PlatformResult = {
   saved: boolean
 }
 
+type ArticleInfo = {
+  title: string
+  url: string
+  source_name: string
+}
+
 function NewPostForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -77,6 +83,40 @@ function NewPostForm() {
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<Record<string, PlatformResult>>({})
   const [activeTab, setActiveTab] = useState<string | null>(null)
+
+  // --- Widget sources et citations (SCRUM-33, 100% client-side) ---
+  const [articleInfo, setArticleInfo] = useState<ArticleInfo | null>(null)
+  const [sourcesPanelOpen, setSourcesPanelOpen] = useState(true)
+  const [citationText, setCitationText] = useState('')
+
+  useEffect(() => {
+    if (!article_id) return
+    const token = getToken()
+    apiFetch(`/articles/${article_id}/`, token)
+      .then(article => setArticleInfo({
+        title: article.title, url: article.url, source_name: article.source_name,
+      }))
+      .catch(() => setArticleInfo(null))
+  }, [article_id])
+
+  function insertIntoActiveTab(text: string) {
+    if (!activeTab) return
+    setResults(prev => ({
+      ...prev,
+      [activeTab]: { ...prev[activeTab], content: `${prev[activeTab].content}\n\n${text}` },
+    }))
+  }
+
+  function handleInsertSource() {
+    if (!articleInfo) return
+    insertIntoActiveTab(`Source : ${articleInfo.source_name} — ${articleInfo.url}`)
+  }
+
+  function handleInsertCitation() {
+    if (!articleInfo || !citationText.trim()) return
+    insertIntoActiveTab(`"${citationText.trim()}" — ${articleInfo.source_name}`)
+    setCitationText('')
+  }
 
   function togglePlatform(platform: string) {
     setSelectedPlatforms(prev =>
@@ -167,7 +207,8 @@ function NewPostForm() {
   }
 
   return (
-    <div className="flex flex-col gap-8 max-w-2xl">
+    <div className="flex flex-col lg:flex-row gap-8 items-start max-w-5xl">
+    <div className="flex flex-col gap-8 max-w-2xl w-full">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Generer un post</h1>
         <p className="text-gray-500 mt-1">Klark va transformer l&apos;article en post pret a publier</p>
@@ -277,6 +318,63 @@ function NewPostForm() {
           </div>
         </div>
       )}
+    </div>
+
+    {articleInfo && (
+      <div className="w-full lg:w-72 shrink-0 bg-white rounded-xl border border-gray-100 flex flex-col gap-4 p-5">
+        <button
+          onClick={() => setSourcesPanelOpen(o => !o)}
+          className="flex items-center justify-between text-sm font-semibold text-gray-900"
+        >
+          Sources & citations
+          <span className="text-gray-400">{sourcesPanelOpen ? '−' : '+'}</span>
+        </button>
+
+        {sourcesPanelOpen && (
+          <>
+            <div className="flex flex-col gap-1">
+              <a
+                href={articleInfo.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm font-medium text-indigo-600 hover:underline"
+              >
+                {articleInfo.title}
+              </a>
+              {articleInfo.source_name && (
+                <p className="text-xs text-gray-400">{articleInfo.source_name}</p>
+              )}
+            </div>
+
+            <button
+              onClick={handleInsertSource}
+              disabled={!activeTab}
+              className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg px-3 py-2 hover:bg-indigo-100 transition disabled:opacity-50"
+            >
+              Insérer la source
+            </button>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-xs font-medium text-gray-700">Citation (max 150 car.)</label>
+              <textarea
+                value={citationText}
+                onChange={e => setCitationText(e.target.value.slice(0, 150))}
+                rows={3}
+                placeholder="Extrait à citer..."
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+              />
+              <button
+                onClick={handleInsertCitation}
+                disabled={!activeTab || !citationText.trim()}
+                className="text-xs bg-gray-50 text-gray-700 border border-gray-200 rounded-lg px-3 py-2 hover:bg-gray-100 transition disabled:opacity-50"
+              >
+                Insérer la citation
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    )}
     </div>
   )
 }
