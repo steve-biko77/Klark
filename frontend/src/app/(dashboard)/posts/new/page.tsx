@@ -14,9 +14,11 @@ export default function NewPostPage() {
 }
 
 function NewPostForm() {
+  const [postId, setPostId] = useState<number | null>(null)
   const [content, setContent] = useState('')
   const [platform, setPlatform] = useState('linkedin')
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [generated, setGenerated] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -30,12 +32,29 @@ function NewPostForm() {
         method: 'POST',
         body: JSON.stringify({ article_id, platform }),
       })
+      setPostId(result.id)
       setContent(result.content)
       setGenerated(true)
     } catch {
       alert('Erreur lors de la generation')
     }
     setLoading(false)
+  }
+
+  async function handleSave() {
+    if (!postId) return
+    setSaving(true)
+    try {
+      const token = getToken()
+      await apiFetch(`/posts/${postId}/`, token, {
+        method: 'PATCH',
+        body: JSON.stringify({ content }),
+      })
+      router.push('/posts')
+    } catch {
+      alert('Erreur lors de la sauvegarde')
+      setSaving(false)
+    }
   }
 
   return (
@@ -79,14 +98,16 @@ function NewPostForm() {
           />
           <div className="flex gap-3">
             <button
-              onClick={() => router.push('/posts')}
-              className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition"
+              onClick={handleSave}
+              disabled={saving}
+              className="flex-1 bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50"
             >
-              Sauvegarder et voir mes posts
+              {saving ? 'Sauvegarde...' : 'Sauvegarder et voir mes posts'}
             </button>
             <button
               onClick={handleGenerate}
-              className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition"
+              disabled={loading}
+              className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition disabled:opacity-50"
             >
               Regenerer
             </button>

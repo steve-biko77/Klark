@@ -16,6 +16,7 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.shortcuts import get_object_or_404
 
 from apps.articles.models import Article
+from apps.authentication.models import Profile
 from .models import Post, LinkedInToken
 from .serializers import PostSerializer
 from .services import generate_post
@@ -35,6 +36,14 @@ class PostDetailView(APIView):
         post = get_object_or_404(Post, id=post_id, user=request.user)
         return Response(PostSerializer(post).data)
 
+    def patch(self, request, post_id):
+        post = get_object_or_404(Post, id=post_id, user=request.user)
+        serializer = PostSerializer(post, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 
 class PostGenerateView(APIView):
 
@@ -44,10 +53,16 @@ class PostGenerateView(APIView):
 
         article = get_object_or_404(Article, id=article_id, source__user=request.user)
 
+        try:
+            style_prompt = request.user.profile.style_prompt
+        except Profile.DoesNotExist:
+            style_prompt = ''
+
         content = generate_post(
             article_title=article.title,
             article_content=article.content,
             platform=platform,
+            style_prompt=style_prompt,
         )
 
         post = Post.objects.create(
