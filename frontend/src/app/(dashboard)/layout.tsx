@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { logout } from '@/lib/auth'
@@ -18,6 +19,14 @@ function GearIcon() {
   )
 }
 
+function MenuIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+      <path d="M3 6h18M3 12h18M3 18h18" />
+    </svg>
+  )
+}
+
 const navItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard' },
   { label: 'Sources', href: '/sources' },
@@ -31,6 +40,7 @@ const navItems: NavItem[] = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const [mobileOpen, setMobileOpen] = useState(false)
 
   function handleLogout() {
     logout()
@@ -39,7 +49,29 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen">
-      <aside className="w-56 bg-white border-r border-gray-100 flex flex-col py-6 px-4 gap-2">
+      <div className="md:hidden fixed top-0 inset-x-0 z-30 flex items-center justify-between bg-white border-b border-gray-100 px-4 py-3">
+        <h1 className="text-lg font-bold text-indigo-600">Klark</h1>
+        <button
+          onClick={() => setMobileOpen(true)}
+          aria-label="Ouvrir le menu"
+          className="p-2 text-gray-600"
+        >
+          <MenuIcon />
+        </button>
+      </div>
+
+      {mobileOpen && (
+        <div
+          className="md:hidden fixed inset-0 bg-black/30 z-40"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      <aside
+        className={`w-56 bg-white border-r border-gray-100 flex flex-col py-6 px-4 gap-2
+          fixed md:static inset-y-0 left-0 z-50 transition-transform duration-200
+          ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0`}
+      >
         <h1 className="text-xl font-bold text-indigo-600 mb-6 px-2">Klark</h1>
 
         <nav className="flex flex-col gap-1 flex-1">
@@ -47,6 +79,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Link
               key={item.href}
               href={item.href}
+              onClick={() => setMobileOpen(false)}
               className={`px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2
                 ${pathname === item.href
                   ? 'bg-indigo-50 text-indigo-600'
@@ -67,7 +100,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </button>
       </aside>
 
-      <main className="flex-1 bg-gray-50 p-8">
+      <main className="flex-1 bg-gray-50 p-8 pt-20 md:pt-8">
         {children}
       </main>
     </div>

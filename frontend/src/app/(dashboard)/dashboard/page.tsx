@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { getToken, getUsername } from '@/lib/auth'
 import { apiFetch } from '@/lib/api'
 
@@ -30,9 +31,17 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Bonjour 👋</h1>
-        <p className="text-gray-500 mt-1">{username}</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Bonjour 👋</h1>
+          <p className="text-gray-500 mt-1">{username}</p>
+        </div>
+        <Link
+          href="/posts/new"
+          className="shrink-0 px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition"
+        >
+          + Nouveau post
+        </Link>
       </div>
 
       <div className="grid grid-cols-3 gap-4">

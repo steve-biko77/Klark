@@ -5,12 +5,14 @@
   --color-primary-dark: #4f46e5;
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+@layer base {
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
 
-body {
-  min-height: 100vh;
+  body {
+    min-height: 100vh;
+  }
 }
