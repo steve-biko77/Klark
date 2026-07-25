@@ -1,19 +1,31 @@
 # Python
 backend/venv/
 backend/.venv/
+workers/.venv/
 **/__pycache__/
 **/*.pyc
+**/.pytest_cache/
 backend/.env
 
 # Node
 **/node_modules/
 **/.next/
+**/*.tsbuildinfo
 
 # Env
 .env
 .env.local
 .env*.local
 
+# Agent tooling (artefacts d'exécution, pas du code source)
+.klark-agent/
+.worktrees/
+
+# IDE
+.vscode/
+.idea/
+
 # Divers
 .DS_Store
 *.log
+*.rar

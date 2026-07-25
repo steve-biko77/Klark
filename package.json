@@ -1,0 +1,10 @@
+{
+  "name": "klark",
+  "private": true,
+  "description": "Klark — automatisation de veille et de contenu éditorial (frontend Next.js, backend Django, workers Celery).",
+  "scripts": {
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build:frontend": "npm --prefix frontend run build",
+    "lint:frontend": "npm --prefix frontend run lint"
+  }
+}
