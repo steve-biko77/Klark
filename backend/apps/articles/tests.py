@@ -35,3 +35,34 @@ class ArticlesViewTest(APITestCase):
         response = self.client.get('/articles/')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, [])
+
+    def test_articles_sorted_by_published_date_desc(self):
+        from datetime import timedelta
+        from django.utils import timezone
+
+        older = Article.objects.create(
+            source=self.source, title='Vieux', url='https://a.com/1',
+            published_at=timezone.now() - timedelta(days=2),
+        )
+        newer = Article.objects.create(
+            source=self.source, title='Récent', url='https://a.com/2',
+            published_at=timezone.now(),
+        )
+
+        response = self.client.get('/articles/')
+        ids = [a['id'] for a in response.data]
+        self.assertEqual(ids, [newer.id, older.id])
+
+    def test_article_includes_source_name_and_stripped_excerpt(self):
+        source = Source.objects.create(user=self.user, url='https://example.com/rss2', name='Ma Source')
+        Article.objects.create(
+            source=source, title='Titre', url='https://a.com/3',
+            content='<p>Contenu <strong>riche</strong> avec balises</p>' + 'x' * 200,
+        )
+
+        response = self.client.get('/articles/')
+        article = response.data[0]
+        self.assertEqual(article['source_name'], 'Ma Source')
+        self.assertNotIn('<p>', article['excerpt'])
+        self.assertNotIn('<strong>', article['excerpt'])
+        self.assertLessEqual(len(article['excerpt']), 150)

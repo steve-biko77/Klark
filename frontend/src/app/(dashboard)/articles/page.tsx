@@ -10,9 +10,31 @@ type Article = {
   title: string
   url: string
   content: string
+  excerpt: string
   score: number
+  published_at: string | null
   created_at: string
   source_id: string
+  source_name: string
+}
+
+const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ['year', 60 * 60 * 24 * 365],
+  ['month', 60 * 60 * 24 * 30],
+  ['day', 60 * 60 * 24],
+  ['hour', 60 * 60],
+  ['minute', 60],
+]
+const relativeFormatter = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' })
+
+function formatRelativeDate(dateString: string): string {
+  const diffSeconds = (new Date(dateString).getTime() - Date.now()) / 1000
+  for (const [unit, secondsInUnit] of RELATIVE_UNITS) {
+    if (Math.abs(diffSeconds) >= secondsInUnit) {
+      return relativeFormatter.format(Math.round(diffSeconds / secondsInUnit), unit)
+    }
+  }
+  return relativeFormatter.format(Math.round(diffSeconds / 60), 'minute')
 }
 
 export default function ArticlesPage() {
@@ -53,7 +75,11 @@ export default function ArticlesPage() {
               >
                 {article.title}
               </a>
-              <p className="text-sm text-gray-400 mt-1">{article.content?.slice(0, 150)}...</p>
+              <p className="text-sm text-gray-400 mt-1">{article.excerpt}</p>
+              <div className="flex gap-3 mt-2 text-xs text-gray-400">
+                {article.source_name && <span>{article.source_name}</span>}
+                <span>{formatRelativeDate(article.published_at ?? article.created_at)}</span>
+              </div>
             </div>
             <button
               onClick={() => router.push(`/posts/new?article_id=${article.id}`)}
