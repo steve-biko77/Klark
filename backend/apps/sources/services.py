@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import feedparser
 
 from apps.articles.models import Article
-from apps.articles.services import score_article
+from apps.articles.services import detect_alerts, score_article
 from apps.authentication.models import Profile
 from .models import Source
 
@@ -45,6 +45,13 @@ def _score_new_article(article: Article, profile: Profile | None) -> None:
         pass
 
 
+def _detect_new_article_alerts(article: Article, user) -> None:
+    try:
+        detect_alerts(article, user)
+    except Exception:
+        pass
+
+
 def scrape_source(source: Source) -> dict:
     feed = feedparser.parse(source.url)
 
@@ -72,6 +79,7 @@ def scrape_source(source: Source) -> dict:
             published_at=_parse_published(entry),
         )
         _score_new_article(article, profile)
+        _detect_new_article_alerts(article, source.user)
         articles_added += 1
 
     source.status = 'active'

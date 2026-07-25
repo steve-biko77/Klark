@@ -1,6 +1,6 @@
 from django.utils.html import strip_tags
 from rest_framework import serializers
-from .models import Article
+from .models import Alert, Article, Notification
 
 
 class ArticleSerializer(serializers.ModelSerializer):
@@ -15,3 +15,19 @@ class ArticleSerializer(serializers.ModelSerializer):
 
     def get_excerpt(self, obj):
         return strip_tags(obj.content)[:150]
+
+
+class AlertSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Alert
+        fields = ['id', 'keyword', 'is_active', 'created_at']
+        read_only_fields = ['id', 'created_at']
+
+
+class NotificationSerializer(serializers.ModelSerializer):
+    article_title = serializers.CharField(source='article.title', read_only=True)
+
+    class Meta:
+        model = Notification
+        fields = ['id', 'article_id', 'article_title', 'keyword', 'is_read', 'created_at']
+        read_only_fields = fields

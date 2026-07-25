@@ -3,6 +3,17 @@ import re
 import anthropic
 from django.conf import settings
 
+from .models import Alert, Article, Notification
+
+
+def detect_alerts(article: Article, user) -> None:
+    """Crée une Notification pour chaque alerte active dont le mot-clé apparaît
+    (insensible à la casse) dans le titre ou le contenu de l'article."""
+    haystack = f"{article.title} {article.content}".lower()
+    for alert in Alert.objects.filter(user=user, is_active=True):
+        if alert.keyword.lower() in haystack:
+            Notification.objects.create(user=user, article=article, keyword=alert.keyword)
+
 
 def parse_score(text: str) -> int:
     """Extrait un entier 0-100 de la réponse Claude ; 0 si rien d'exploitable."""

@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { logout } from '@/lib/auth'
+import { getToken, logout } from '@/lib/auth'
+import { apiFetch } from '@/lib/api'
 
 type NavItem = {
   label: string
@@ -41,6 +42,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+
+  useEffect(() => {
+    const token = getToken()
+    apiFetch('/notifications/', token)
+      .then(data => setUnreadCount(data.filter((n: { is_read: boolean }) => !n.is_read).length))
+      .catch(() => setUnreadCount(0))
+  }, [pathname])
 
   function handleLogout() {
     logout()
@@ -88,6 +97,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             >
               {item.icon}
               {item.label}
+              {item.href === '/dashboard' && unreadCount > 0 && (
+                <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                  {unreadCount}
+                </span>
+              )}
             </Link>
           ))}
         </nav>
