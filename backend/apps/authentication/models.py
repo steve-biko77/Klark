@@ -18,8 +18,8 @@ class Profile(models.Model):
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     persona = models.CharField(max_length=20, choices=PERSONA_CHOICES)
-    style_prompt = models.TextField()
-    sector = models.CharField(max_length=100)
+    style_prompt = models.TextField(blank=True, default='')
+    sector = models.CharField(max_length=100, blank=True, default='')
     tone = models.CharField(max_length=20, choices=TONE_CHOICES)
 
     def __str__(self):

@@ -236,3 +236,14 @@ class ProfileEndpointTest(APITestCase):
     def test_patch_profile_rejects_invalid_persona(self):
         response = self.client.patch('/profile/', {'persona': 'NOT_A_PERSONA'}, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_patch_profile_allows_blank_sector_and_style_prompt(self):
+        response = self.client.patch('/profile/', {
+            'persona': 'TRADER',
+            'tone': 'DIRECT',
+            'sector': '',
+            'style_prompt': '',
+        }, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['sector'], '')
