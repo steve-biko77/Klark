@@ -66,3 +66,22 @@ class ArticlesViewTest(APITestCase):
         self.assertNotIn('<p>', article['excerpt'])
         self.assertNotIn('<strong>', article['excerpt'])
         self.assertLessEqual(len(article['excerpt']), 150)
+
+
+class ParseScoreTest(APITestCase):
+
+    def test_parses_plain_integer(self):
+        from apps.articles.services import parse_score
+        self.assertEqual(parse_score('85'), 85)
+
+    def test_parses_integer_within_sentence(self):
+        from apps.articles.services import parse_score
+        self.assertEqual(parse_score('Le score est 42 sur 100.'), 42)
+
+    def test_clamps_above_100(self):
+        from apps.articles.services import parse_score
+        self.assertEqual(parse_score('150'), 100)
+
+    def test_returns_zero_if_no_digits(self):
+        from apps.articles.services import parse_score
+        self.assertEqual(parse_score('pas de chiffre ici'), 0)

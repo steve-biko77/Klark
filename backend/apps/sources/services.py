@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 import feedparser
 
 from apps.articles.models import Article
+from apps.articles.services import score_article
+from apps.authentication.models import Profile
 from .models import Source
 
 
@@ -25,6 +27,24 @@ def _extract_content(entry) -> str:
     return entry.get('summary', entry.get('description', ''))
 
 
+def _score_new_article(article: Article, profile: Profile | None) -> None:
+    """Score sémantique 0-100 selon le profil ; laisse le score par défaut (0) si pas de profil
+    ou si l'appel Claude échoue, pour ne jamais faire échouer le scraping à cause du scoring."""
+    if profile is None:
+        return
+    try:
+        article.score = score_article(
+            article_title=article.title,
+            article_content=article.content,
+            persona=profile.persona,
+            sector=profile.sector,
+            style_prompt=profile.style_prompt,
+        )
+        article.save(update_fields=['score'])
+    except Exception:
+        pass
+
+
 def scrape_source(source: Source) -> dict:
     feed = feedparser.parse(source.url)
 
@@ -33,12 +53,17 @@ def scrape_source(source: Source) -> dict:
         source.save(update_fields=['status'])
         return {'error': 'Flux RSS invalide', 'articles_added': 0}
 
+    try:
+        profile = source.user.profile
+    except Profile.DoesNotExist:
+        profile = None
+
     articles_added = 0
     for entry in feed.entries[:10]:
         link = entry.get('link', '')
         if Article.objects.filter(source=source, url=link).exists():
             continue
-        Article.objects.create(
+        article = Article.objects.create(
             source=source,
             title=entry.get('title', 'Sans titre'),
             content=_extract_content(entry),
@@ -46,6 +71,7 @@ def scrape_source(source: Source) -> dict:
             score=0.0,
             published_at=_parse_published(entry),
         )
+        _score_new_article(article, profile)
         articles_added += 1
 
     source.status = 'active'

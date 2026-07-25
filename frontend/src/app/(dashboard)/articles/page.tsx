@@ -37,9 +37,17 @@ function formatRelativeDate(dateString: string): string {
   return relativeFormatter.format(Math.round(diffSeconds / 60), 'minute')
 }
 
+function scoreBadgeStyle(score: number): string {
+  if (score > 70) return 'bg-green-50 text-green-700 border border-green-200'
+  if (score >= 40) return 'bg-amber-50 text-amber-700 border border-amber-200'
+  return 'bg-red-50 text-red-700 border border-red-200'
+}
+
 export default function ArticlesPage() {
   const [articles, setArticles] = useState<Article[]>([])
   const [loading, setLoading] = useState(true)
+  const [sortByScore, setSortByScore] = useState(false)
+  const [relevantOnly, setRelevantOnly] = useState(false)
   const router = useRouter()
 
   async function loadArticles() {
@@ -51,6 +59,10 @@ export default function ArticlesPage() {
 
   useEffect(() => { loadArticles() }, [])
 
+  const displayedArticles = articles
+    .filter(a => !relevantOnly || a.score > 70)
+    .sort((a, b) => (sortByScore ? b.score - a.score : 0))
+
   return (
     <div className="flex flex-col gap-8">
       <div>
@@ -58,23 +70,53 @@ export default function ArticlesPage() {
         <p className="text-gray-500 mt-1">Articles collectes par Klark depuis tes sources</p>
       </div>
 
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setSortByScore(s => !s)}
+          className={`text-xs px-3 py-1.5 rounded-full font-medium border transition ${
+            sortByScore
+              ? 'bg-indigo-600 text-white border-indigo-600'
+              : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'
+          }`}
+        >
+          Trier par score
+        </button>
+        <button
+          onClick={() => setRelevantOnly(r => !r)}
+          className={`text-xs px-3 py-1.5 rounded-full font-medium border transition ${
+            relevantOnly
+              ? 'bg-green-600 text-white border-green-600'
+              : 'bg-white text-gray-600 border-gray-200 hover:border-green-300'
+          }`}
+        >
+          Pertinents uniquement
+        </button>
+      </div>
+
       {loading && <p className="text-gray-400 text-sm">Chargement...</p>}
 
       <div className="flex flex-col gap-3">
-        {articles.length === 0 && !loading && (
+        {displayedArticles.length === 0 && !loading && (
           <p className="text-gray-400 text-sm">Aucun article — scrape une source dabord.</p>
         )}
-        {articles.map(article => (
+        {displayedArticles.map(article => (
           <div key={article.id} className="bg-white rounded-xl p-5 border border-gray-100 flex items-start justify-between gap-4">
             <div className="flex-1">
-              <a
-                href={article.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="font-medium text-gray-900 hover:text-indigo-600 transition"
-              >
-                {article.title}
-              </a>
+              <div className="flex items-center gap-2">
+                <a
+                  href={article.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-gray-900 hover:text-indigo-600 transition"
+                >
+                  {article.title}
+                </a>
+                {article.score > 0 && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${scoreBadgeStyle(article.score)}`}>
+                    {Math.round(article.score)}
+                  </span>
+                )}
+              </div>
               <p className="text-sm text-gray-400 mt-1">{article.excerpt}</p>
               <div className="flex gap-3 mt-2 text-xs text-gray-400">
                 {article.source_name && <span>{article.source_name}</span>}

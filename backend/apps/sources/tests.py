@@ -115,3 +115,60 @@ class ScrapeSourceServiceTest(TestCase):
         self.assertIn('error', result)
         source.refresh_from_db()
         self.assertEqual(source.status, 'error')
+
+
+class ScrapeSourceScoringTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='scoreuser', password='pass')
+        self.feed_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+  <item>
+    <title>Article à scorer</title>
+    <link>https://example.com/scored-article</link>
+    <description>Un article sur la finance.</description>
+  </item>
+</channel>
+</rss>"""
+
+    @patch('apps.sources.services.score_article')
+    def test_scores_article_when_profile_exists(self, mock_score):
+        from apps.authentication.models import Profile
+        Profile.objects.create(
+            user=self.user, persona='TRADER',
+            style_prompt='Direct', sector='Finance', tone='DIRECT',
+        )
+        mock_score.return_value = 82
+
+        source = Source.objects.create(user=self.user, url=self.feed_xml)
+        scrape_source(source)
+
+        article = Article.objects.get(source=source)
+        self.assertEqual(article.score, 82)
+        mock_score.assert_called_once()
+        self.assertEqual(mock_score.call_args.kwargs['persona'], 'TRADER')
+
+    @patch('apps.sources.services.score_article')
+    def test_score_defaults_to_zero_without_profile(self, mock_score):
+        source = Source.objects.create(user=self.user, url=self.feed_xml)
+        scrape_source(source)
+
+        article = Article.objects.get(source=source)
+        self.assertEqual(article.score, 0.0)
+        mock_score.assert_not_called()
+
+    @patch('apps.sources.services.score_article', side_effect=Exception('API down'))
+    def test_scraping_succeeds_even_if_scoring_fails(self, mock_score):
+        from apps.authentication.models import Profile
+        Profile.objects.create(
+            user=self.user, persona='TRADER',
+            style_prompt='', sector='', tone='DIRECT',
+        )
+
+        source = Source.objects.create(user=self.user, url=self.feed_xml)
+        result = scrape_source(source)
+
+        self.assertEqual(result['articles_added'], 1)
+        article = Article.objects.get(source=source)
+        self.assertEqual(article.score, 0.0)
