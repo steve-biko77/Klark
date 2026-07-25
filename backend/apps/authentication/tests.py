@@ -2,6 +2,7 @@ from unittest.mock import patch
 from datetime import timedelta
 
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.utils import timezone
 from rest_framework.test import APITestCase
 from rest_framework import status
@@ -28,6 +29,13 @@ class RegisterViewTest(APITestCase):
         data = {'username': 'testuser', 'email': 'a@b.com', 'password': 'StrongPass123!'}
         response = self.client.post('/auth/register/', data, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_register_duplicate_email(self):
+        User.objects.create_user(username='other', email='dup@example.com', password='pass')
+        data = {'username': 'newuser', 'email': 'dup@example.com', 'password': 'StrongPass123!'}
+        response = self.client.post('/auth/register/', data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(User.objects.filter(username='newuser').exists())
 
 
 class LoginOTPViewTest(APITestCase):
@@ -59,6 +67,7 @@ class LoginOTPViewTest(APITestCase):
 class VerifyOTPViewTest(APITestCase):
 
     def setUp(self):
+        cache.clear()
         self.user = User.objects.create_user(username='testuser', email='test@example.com', password='pass')
 
     def test_verify_valid_otp_returns_tokens(self):
@@ -104,6 +113,40 @@ class VerifyOTPViewTest(APITestCase):
             'user_id': self.user.id, 'code': '123456',
         }, format='json')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+
+class VerifyOTPLockoutTest(APITestCase):
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(username='lockuser', email='lock@example.com', password='pass')
+        OTPCode.objects.create(
+            user=self.user, code='123456',
+            expires_at=timezone.now() + timedelta(minutes=10),
+        )
+
+    def test_locked_out_after_three_failed_attempts(self):
+        for _ in range(3):
+            response = self.client.post('/auth/verify-otp/', {
+                'user_id': self.user.id, 'code': '000000',
+            }, format='json')
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+        response = self.client.post('/auth/verify-otp/', {
+            'user_id': self.user.id, 'code': '123456',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_429_TOO_MANY_REQUESTS)
+
+    def test_successful_verify_before_lockout_still_works(self):
+        for _ in range(2):
+            self.client.post('/auth/verify-otp/', {
+                'user_id': self.user.id, 'code': '000000',
+            }, format='json')
+
+        response = self.client.post('/auth/verify-otp/', {
+            'user_id': self.user.id, 'code': '123456',
+        }, format='json')
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 
 class PasswordResetViewTest(APITestCase):

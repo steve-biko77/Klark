@@ -4,6 +4,7 @@ from datetime import timedelta
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
+from django.core.cache import cache
 from django.core.mail import send_mail
 from django.conf import settings
 from django.utils import timezone
@@ -85,6 +86,9 @@ class VerifyOTPView(APIView):
     """Vérifie le code OTP et retourne les tokens JWT."""
     permission_classes = [AllowAny]
 
+    MAX_ATTEMPTS = 3
+    LOCKOUT_SECONDS = 15 * 60
+
     def post(self, request):
         user_id = request.data.get('user_id')
         code = request.data.get('code', '').strip()
@@ -94,16 +98,27 @@ class VerifyOTPView(APIView):
         except User.DoesNotExist:
             return Response({'error': 'Utilisateur non trouvé'}, status=status.HTTP_400_BAD_REQUEST)
 
+        lockout_key = f'otp_lockout:{user.id}'
+        if cache.get(lockout_key):
+            return Response(
+                {'error': 'Trop de tentatives échouées. Réessayez dans 15 minutes.'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
         try:
             otp = OTPCode.objects.get(user=user, code=code, used=False)
         except OTPCode.DoesNotExist:
+            self._register_failed_attempt(user.id)
             return Response({'error': 'Code invalide'}, status=status.HTTP_400_BAD_REQUEST)
 
         if otp.expires_at < timezone.now():
+            self._register_failed_attempt(user.id)
             return Response({'error': 'Code expiré — demandez un nouveau code'}, status=status.HTTP_400_BAD_REQUEST)
 
         otp.used = True
         otp.save()
+        cache.delete(f'otp_attempts:{user.id}')
+        cache.delete(lockout_key)
 
         refresh = RefreshToken.for_user(user)
         return Response({
@@ -111,6 +126,14 @@ class VerifyOTPView(APIView):
             'refresh': str(refresh),
             'username': user.username,
         })
+
+    @classmethod
+    def _register_failed_attempt(cls, user_id):
+        attempts_key = f'otp_attempts:{user_id}'
+        attempts = cache.get(attempts_key, 0) + 1
+        cache.set(attempts_key, attempts, cls.LOCKOUT_SECONDS)
+        if attempts >= cls.MAX_ATTEMPTS:
+            cache.set(f'otp_lockout:{user_id}', True, cls.LOCKOUT_SECONDS)
 
 
 class ResendOTPView(APIView):
