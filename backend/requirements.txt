@@ -8,3 +8,4 @@ psycopg2-binary==2.9.11
 feedparser==6.0.12
 anthropic==0.94.1
 cryptography==44.0.3
+pymupdf==1.28.0

@@ -2,11 +2,23 @@ import re
 from datetime import timedelta
 
 import anthropic
+import fitz
 from django.conf import settings
 from django.utils import timezone
 
 from apps.posts.ai_service import log_ai_usage, select_model
 from .models import Alert, Article, DailyBriefing, Notification
+
+
+def extract_pdf_text(file) -> str:
+    """Extrait le texte d'un PDF page par page. Lève une exception si le
+    fichier n'est pas un PDF exploitable."""
+    data = file.read()
+    doc = fitz.open(stream=data, filetype='pdf')
+    try:
+        return ''.join(page.get_text() for page in doc)
+    finally:
+        doc.close()
 
 
 def detect_alerts(article: Article, user) -> None:

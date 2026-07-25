@@ -178,7 +178,7 @@ export default function SettingsPage() {
         <div>
           <h2 className="text-base font-semibold text-gray-900">Alertes mots-clés</h2>
           <p className="text-xs text-gray-400 mt-0.5">
-            Soyez notifié dès qu'un article contient un mot-clé important pour vous
+            Soyez notifié dès qu&apos;un article contient un mot-clé important pour vous
           </p>
         </div>
         <Link
