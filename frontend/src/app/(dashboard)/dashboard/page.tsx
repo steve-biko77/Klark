@@ -35,7 +35,7 @@ export default function DashboardPage() {
 
       <div className="bg-white rounded-xl p-6 border border-gray-100">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Activité récente</h2>
-        <p className="text-gray-400 text-sm">Aucune activité pour l'instant — commence par ajouter une source.</p>
+        <p className="text-gray-400 text-sm">Aucune activité pour l&apos;instant — commence par ajouter une source.</p>
       </div>
     </div>
   )
