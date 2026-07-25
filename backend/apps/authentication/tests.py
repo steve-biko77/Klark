@@ -7,7 +7,7 @@ from django.utils import timezone
 from rest_framework.test import APITestCase
 from rest_framework import status
 
-from .models import OTPCode
+from .models import OTPCode, Profile
 
 
 class RegisterViewTest(APITestCase):
@@ -168,3 +168,25 @@ class PasswordResetViewTest(APITestCase):
         response = self.client.post('/auth/password-reset/', {'email': 'unknown@example.com'}, format='json')
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(mock_mail.called)
+
+
+class ProfileModelTest(APITestCase):
+
+    def test_create_profile_with_persona_and_tone(self):
+        user = User.objects.create_user(username='produser', password='pass')
+        profile = Profile.objects.create(
+            user=user,
+            persona='TRADER',
+            style_prompt='Direct et factuel, orienté marchés financiers.',
+            sector='Finance',
+            tone='EXPERT',
+        )
+        self.assertEqual(profile.user, user)
+        self.assertEqual(profile.get_persona_display(), 'Trader')
+        self.assertEqual(profile.get_tone_display(), 'Expert')
+
+    def test_profile_is_one_to_one_with_user(self):
+        user = User.objects.create_user(username='onlyone', password='pass')
+        Profile.objects.create(user=user, persona='CREATEUR', style_prompt='x', sector='Média', tone='DIRECT')
+        with self.assertRaises(Exception):
+            Profile.objects.create(user=user, persona='PASSIONNE', style_prompt='y', sector='Tech', tone='ACCESSIBLE')
