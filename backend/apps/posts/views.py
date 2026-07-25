@@ -6,6 +6,7 @@ import urllib.request
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.http import HttpResponseRedirect
 from django.utils import timezone
 from rest_framework.views import APIView
@@ -182,6 +183,7 @@ class LinkedInAuthView(APIView):
 
         client_id = settings.LINKEDIN_CLIENT_ID
         state = f"{user_id}:{secrets.token_urlsafe(16)}"
+        cache.set(f'linkedin_oauth_state:{state}', True, 600)
 
         if client_id == 'mock':
             callback_url = (
@@ -216,6 +218,11 @@ class LinkedInCallbackView(APIView):
 
         if not code or not state:
             return HttpResponseRedirect(error_url)
+
+        state_key = f'linkedin_oauth_state:{state}'
+        if not cache.get(state_key):
+            return HttpResponseRedirect(error_url)
+        cache.delete(state_key)
 
         try:
             user_id = int(state.split(':')[0])

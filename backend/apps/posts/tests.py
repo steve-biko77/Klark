@@ -1,13 +1,16 @@
 from datetime import timedelta
 from unittest.mock import patch
+from urllib.parse import urlparse, parse_qs
 from django.contrib.auth.models import User
+from django.test import override_settings
 from django.utils import timezone
 from rest_framework.test import APITestCase
 from rest_framework import status
 from apps.authentication.models import Profile
 from apps.sources.models import Source
 from apps.articles.models import Article
-from apps.posts.models import Post
+from apps.posts.models import Post, LinkedInToken
+from apps.posts.encryption import decrypt
 
 
 class PostsViewTest(APITestCase):
@@ -159,3 +162,79 @@ class ScheduleEndpointTest(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['status'], 'scheduled')
+
+
+@override_settings(LINKEDIN_CLIENT_ID='mock')
+class LinkedInOAuthTest(APITestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='liuser', password='pass')
+
+    def _get_access_token(self):
+        from rest_framework_simplejwt.tokens import RefreshToken
+        return str(RefreshToken.for_user(self.user).access_token)
+
+    def test_auth_redirects_with_state_for_valid_token(self):
+        token = self._get_access_token()
+        response = self.client.get(f'/posts/linkedin/auth/?token={token}')
+        self.assertEqual(response.status_code, 302)
+        qs = parse_qs(urlparse(response.url).query)
+        self.assertIn('state', qs)
+        self.assertEqual(qs['code'][0], 'mock')
+
+    def test_auth_rejects_invalid_token(self):
+        response = self.client.get('/posts/linkedin/auth/?token=garbage')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_callback_full_mock_flow_creates_token(self):
+        token = self._get_access_token()
+        auth_response = self.client.get(f'/posts/linkedin/auth/?token={token}')
+        qs = parse_qs(urlparse(auth_response.url).query)
+        state, code = qs['state'][0], qs['code'][0]
+
+        callback_response = self.client.get(f'/posts/linkedin/callback/?code={code}&state={state}')
+
+        self.assertEqual(callback_response.status_code, 302)
+        self.assertIn('linkedin=connected', callback_response.url)
+        li_token = LinkedInToken.objects.get(user=self.user)
+        self.assertEqual(decrypt(li_token.access_token), 'mock_access_token_klark_123')
+
+    def test_callback_rejects_forged_state_never_issued(self):
+        forged_state = f'{self.user.id}:not-a-real-nonce'
+        response = self.client.get(f'/posts/linkedin/callback/?code=mock&state={forged_state}')
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('linkedin=error', response.url)
+        self.assertFalse(LinkedInToken.objects.filter(user=self.user).exists())
+
+    def test_callback_rejects_reused_state(self):
+        token = self._get_access_token()
+        auth_response = self.client.get(f'/posts/linkedin/auth/?token={token}')
+        qs = parse_qs(urlparse(auth_response.url).query)
+        state, code = qs['state'][0], qs['code'][0]
+
+        self.client.get(f'/posts/linkedin/callback/?code={code}&state={state}')
+        second = self.client.get(f'/posts/linkedin/callback/?code={code}&state={state}')
+
+        self.assertIn('linkedin=error', second.url)
+
+    def test_disconnect_deletes_token(self):
+        LinkedInToken.objects.create(
+            user=self.user, access_token='enc', token_type='Bearer',
+            expires_at=timezone.now() + timedelta(days=1),
+        )
+        self.client.force_authenticate(user=self.user)
+        response = self.client.delete('/posts/linkedin/disconnect/')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(LinkedInToken.objects.filter(user=self.user).exists())
+
+    def test_status_reports_connected(self):
+        LinkedInToken.objects.create(
+            user=self.user, access_token='enc', token_type='Bearer',
+            expires_at=timezone.now() + timedelta(days=1),
+        )
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get('/posts/linkedin/status/')
+
+        self.assertTrue(response.data['connected'])
