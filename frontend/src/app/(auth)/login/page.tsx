@@ -1,12 +1,22 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { login } from '@/lib/auth'
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  )
+}
+
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const expired = searchParams.get('expired') === '1'
 
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -34,6 +44,12 @@ export default function LoginPage() {
       <div className="w-full max-w-md p-8 bg-white rounded-2xl shadow-sm border border-gray-100">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">Connexion</h1>
         <p className="text-gray-500 mb-8">Content de te revoir sur Klark</p>
+
+        {expired && (
+          <p className="mb-4 text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+            Ta session a expiré, merci de te reconnecter.
+          </p>
+        )}
 
         <form onSubmit={handleLogin} className="flex flex-col gap-4">
           <div>

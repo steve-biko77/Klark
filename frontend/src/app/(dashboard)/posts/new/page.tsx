@@ -1,11 +1,19 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import { getToken } from '@/lib/auth'
 import { apiFetch } from '@/lib/api'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 export default function NewPostPage() {
+  return (
+    <Suspense fallback={null}>
+      <NewPostForm />
+    </Suspense>
+  )
+}
+
+function NewPostForm() {
   const [content, setContent] = useState('')
   const [platform, setPlatform] = useState('linkedin')
   const [loading, setLoading] = useState(false)

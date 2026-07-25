@@ -1,12 +1,20 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { verifyOTP, resendOTP } from '@/lib/auth'
 
 const OTP_TTL = 10 * 60 // 10 minutes en secondes
 
 export default function VerifyOTPPage() {
+  return (
+    <Suspense fallback={null}>
+      <VerifyOTPForm />
+    </Suspense>
+  )
+}
+
+function VerifyOTPForm() {
   const router = useRouter()
   const params = useSearchParams()
 

@@ -37,9 +37,29 @@ export async function apiFetch(path: string, token: string, options: RequestInit
     const newToken = await refreshAccessToken()
     if (newToken) {
       res = await makeRequest(newToken)
+    } else {
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login?expired=1'
+      }
+      throw new Error('Session expirée')
     }
   }
 
   if (!res.ok) throw new Error(`API error: ${res.status}`)
   return res.json()
+}
+
+function currentToken(): string {
+  if (typeof document === 'undefined') return ''
+  const match = document.cookie.match(/(^| )access_token=([^;]+)/)
+  return match ? match[2] : ''
+}
+
+export const api = {
+  get: (path: string) => apiFetch(path, currentToken()),
+  post: (path: string, data: unknown) =>
+    apiFetch(path, currentToken(), { method: 'POST', body: JSON.stringify(data) }),
+  patch: (path: string, data: unknown) =>
+    apiFetch(path, currentToken(), { method: 'PATCH', body: JSON.stringify(data) }),
+  delete: (path: string) => apiFetch(path, currentToken(), { method: 'DELETE' }),
 }
