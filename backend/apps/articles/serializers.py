@@ -1,6 +1,6 @@
 from django.utils.html import strip_tags
 from rest_framework import serializers
-from .models import Alert, Article, Notification
+from .models import Alert, Article, DailyBriefing, Notification
 
 
 class ArticleSerializer(serializers.ModelSerializer):
@@ -30,4 +30,11 @@ class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
         fields = ['id', 'article_id', 'article_title', 'keyword', 'is_read', 'created_at']
+        read_only_fields = fields
+
+
+class DailyBriefingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DailyBriefing
+        fields = ['id', 'date', 'content', 'is_read', 'created_at']
         read_only_fields = fields

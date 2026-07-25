@@ -44,3 +44,20 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"Notification '{self.keyword}' — {self.user}"
+
+
+class DailyBriefing(models.Model):
+    """Briefing flash Trader : jusqu'à 5 signaux (articles score > 70 des dernières
+    24h), résumés en 3 lignes chacun. content = [{article_id, article_title, lines}, ...]."""
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='briefings')
+    date = models.DateField()
+    content = models.JSONField(default=list)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date']
+        unique_together = ['user', 'date']
+
+    def __str__(self):
+        return f"Briefing {self.user} — {self.date}"

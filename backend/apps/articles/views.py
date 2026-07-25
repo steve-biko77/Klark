@@ -4,8 +4,10 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework import status
 
-from .models import Alert, Article, Notification
-from .serializers import AlertSerializer, ArticleSerializer, NotificationSerializer
+from apps.authentication.models import Profile
+from .models import Alert, Article, DailyBriefing, Notification
+from .serializers import AlertSerializer, ArticleSerializer, DailyBriefingSerializer, NotificationSerializer
+from .services import generate_daily_briefing
 
 MAX_ACTIVE_ALERTS = 10
 
@@ -82,3 +84,43 @@ class NotificationMarkReadView(APIView):
         notification.is_read = True
         notification.save(update_fields=['is_read'])
         return Response(NotificationSerializer(notification).data)
+
+
+class TodayBriefingView(APIView):
+    """Génère (déclenchement paresseux, à la demande) et retourne le briefing flash
+    du jour pour les Traders. None pour tout autre persona ou profil absent.
+
+    Déviation assumée : le prompt technique décrit une tâche Celery Beat à 7h,
+    mais l'infra Celery est en cours de construction ailleurs (SCRUM-22) — génération
+    à la demande au premier chargement du dashboard plutôt que planifiée."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            profile = request.user.profile
+        except Profile.DoesNotExist:
+            return Response(None)
+
+        if profile.persona != 'TRADER':
+            return Response(None)
+
+        briefing = generate_daily_briefing(request.user)
+        return Response(DailyBriefingSerializer(briefing).data)
+
+
+class BriefingListView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        briefings = DailyBriefing.objects.filter(user=request.user)
+        return Response(DailyBriefingSerializer(briefings, many=True).data)
+
+
+class BriefingMarkReadView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request, briefing_id):
+        briefing = get_object_or_404(DailyBriefing, id=briefing_id, user=request.user)
+        briefing.is_read = True
+        briefing.save(update_fields=['is_read'])
+        return Response(DailyBriefingSerializer(briefing).data)
