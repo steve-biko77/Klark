@@ -111,10 +111,13 @@ class PostCalendarView(APIView):
 
 class PostScheduleView(APIView):
 
+    CONFLICT_WINDOW_MINUTES = 30
+
     def patch(self, request, post_id):
         post = get_object_or_404(Post, id=post_id, user=request.user)
 
         scheduled_str = request.data.get('scheduled_at')
+        force_conflict = bool(request.data.get('force_conflict', False))
         if not scheduled_str:
             return Response({'error': 'scheduled_at required'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -123,6 +126,28 @@ class PostScheduleView(APIView):
             aware_dt = timezone.make_aware(naive_dt) if timezone.is_naive(naive_dt) else naive_dt
         except ValueError:
             return Response({'error': 'Invalid datetime format'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if aware_dt <= timezone.now():
+            return Response(
+                {'error': 'Impossible de programmer dans le passé'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not force_conflict:
+            window = datetime.timedelta(minutes=self.CONFLICT_WINDOW_MINUTES)
+            conflict = Post.objects.filter(
+                user=request.user,
+                platform=post.platform,
+                status='scheduled',
+                scheduled_at__range=(aware_dt - window, aware_dt + window),
+            ).exclude(pk=post.id).first()
+
+            if conflict:
+                return Response({
+                    'warning': 'Conflit horaire détecté',
+                    'conflicting_post_id': conflict.id,
+                    'conflicting_time': conflict.scheduled_at,
+                }, status=status.HTTP_200_OK)
 
         post.scheduled_at = aware_dt
         post.status = 'scheduled'

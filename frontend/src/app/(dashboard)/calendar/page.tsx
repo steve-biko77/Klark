@@ -52,6 +52,7 @@ export default function CalendarPage() {
   const [selectedPostId, setSelectedPostId] = useState('')
   const [modalTime, setModalTime] = useState('')
   const [scheduling, setScheduling] = useState(false)
+  const [conflict, setConflict] = useState<{ conflicting_time: string } | null>(null)
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
 
@@ -95,17 +96,27 @@ export default function CalendarPage() {
     setModal({ date: toWeekParam(day), hour })
     setModalTime(`${String(hour).padStart(2, '0')}:00`)
     setSelectedPostId('')
+    setConflict(null)
   }
 
-  async function handleSchedule() {
+  async function handleSchedule(force = false) {
     if (!modal || !selectedPostId || !modalTime) return
     setScheduling(true)
     const token = getToken()
     try {
-      await apiFetch(`/posts/${selectedPostId}/schedule/`, token!, {
+      const result = await apiFetch(`/posts/${selectedPostId}/schedule/`, token!, {
         method: 'PATCH',
-        body: JSON.stringify({ scheduled_at: `${modal.date}T${modalTime}:00` }),
+        body: JSON.stringify({
+          scheduled_at: `${modal.date}T${modalTime}:00`,
+          force_conflict: force,
+        }),
       })
+      if (result.warning && !force) {
+        setConflict(result)
+        setScheduling(false)
+        return
+      }
+      setConflict(null)
       setModal(null)
       await Promise.all([loadCalendar(), loadDrafts()])
     } catch {
@@ -180,7 +191,11 @@ export default function CalendarPage() {
                   </td>
                   {weekDays.map((day, di) => {
                     const slotPosts = getPostsInSlot(day, hour)
-                    const hasConflict = slotPosts.length >= 2
+                    const platformCounts = slotPosts.reduce<Record<string, number>>((acc, p) => {
+                      acc[p.platform] = (acc[p.platform] ?? 0) + 1
+                      return acc
+                    }, {})
+                    const hasConflict = Object.values(platformCounts).some(count => count >= 2)
                     return (
                       <td
                         key={di}
@@ -270,6 +285,24 @@ export default function CalendarPage() {
               </div>
             </div>
 
+            {conflict && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm text-amber-700 flex flex-col gap-2">
+                <span>
+                  ⚠️ Conflit horaire : un autre post est déjà programmé à{' '}
+                  {new Date(conflict.conflicting_time).toLocaleString('fr-FR', {
+                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                  })} sur la même plateforme.
+                </span>
+                <button
+                  onClick={() => handleSchedule(true)}
+                  disabled={scheduling}
+                  className="self-start px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 transition disabled:opacity-50"
+                >
+                  Programmer quand même
+                </button>
+              </div>
+            )}
+
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setModal(null)}
@@ -278,7 +311,7 @@ export default function CalendarPage() {
                 Annuler
               </button>
               <button
-                onClick={handleSchedule}
+                onClick={() => handleSchedule()}
                 disabled={scheduling || !selectedPostId || !modalTime}
                 className="px-6 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition disabled:opacity-50"
               >

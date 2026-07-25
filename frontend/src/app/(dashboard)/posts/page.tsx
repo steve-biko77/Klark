@@ -64,6 +64,7 @@ export default function PostsPage() {
   const [schedDate, setSchedDate] = useState('')
   const [schedTime, setSchedTime] = useState('')
   const [scheduling, setScheduling] = useState(false)
+  const [conflict, setConflict] = useState<{ conflicting_time: string } | null>(null)
 
   async function loadPosts() {
     const token = getToken()
@@ -85,18 +86,28 @@ export default function PostsPage() {
       setSchedDate(tomorrow.toISOString().slice(0, 10))
       setSchedTime('09:00')
     }
+    setConflict(null)
     setModal(post)
   }
 
-  async function handleSchedule() {
+  async function handleSchedule(force = false) {
     if (!modal || !schedDate || !schedTime) return
     setScheduling(true)
     const token = getToken()
     try {
-      await apiFetch(`/posts/${modal.id}/schedule/`, token!, {
+      const result = await apiFetch(`/posts/${modal.id}/schedule/`, token!, {
         method: 'PATCH',
-        body: JSON.stringify({ scheduled_at: `${schedDate}T${schedTime}:00` }),
+        body: JSON.stringify({
+          scheduled_at: `${schedDate}T${schedTime}:00`,
+          force_conflict: force,
+        }),
       })
+      if (result.warning && !force) {
+        setConflict(result)
+        setScheduling(false)
+        return
+      }
+      setConflict(null)
       setModal(null)
       await loadPosts()
     } catch {
@@ -260,6 +271,24 @@ export default function PostsPage() {
               </div>
             </div>
 
+            {conflict && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm text-amber-700 flex flex-col gap-2">
+                <span>
+                  ⚠️ Conflit horaire : un autre post est déjà programmé à{' '}
+                  {new Date(conflict.conflicting_time).toLocaleString('fr-FR', {
+                    day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+                  })} sur la même plateforme.
+                </span>
+                <button
+                  onClick={() => handleSchedule(true)}
+                  disabled={scheduling}
+                  className="self-start px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded-lg hover:bg-amber-700 transition disabled:opacity-50"
+                >
+                  Programmer quand même
+                </button>
+              </div>
+            )}
+
             <div className="flex items-center justify-end gap-3">
               <button
                 onClick={() => setModal(null)}
@@ -268,7 +297,7 @@ export default function PostsPage() {
                 Annuler
               </button>
               <button
-                onClick={handleSchedule}
+                onClick={() => handleSchedule()}
                 disabled={scheduling || !schedDate || !schedTime}
                 className="px-6 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition disabled:opacity-50"
               >

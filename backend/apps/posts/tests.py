@@ -1,5 +1,7 @@
+from datetime import timedelta
 from unittest.mock import patch
 from django.contrib.auth.models import User
+from django.utils import timezone
 from rest_framework.test import APITestCase
 from rest_framework import status
 from apps.authentication.models import Profile
@@ -83,3 +85,77 @@ class PostsViewTest(APITestCase):
         post = Post.objects.create(user=other, content='Pas à moi', platform='linkedin')
         response = self.client.patch(f'/posts/{post.id}/', {'content': 'Hack'}, format='json')
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class ScheduleEndpointTest(APITestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='scheduser', password='pass')
+        self.client.force_authenticate(user=self.user)
+
+    def test_schedule_rejects_past_date(self):
+        post = Post.objects.create(user=self.user, content='Post', platform='linkedin')
+        past = (timezone.now() - timedelta(days=1)).isoformat()
+
+        response = self.client.patch(f'/posts/{post.id}/schedule/', {'scheduled_at': past}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        post.refresh_from_db()
+        self.assertEqual(post.status, 'draft')
+
+    def test_schedule_success_no_conflict(self):
+        post = Post.objects.create(user=self.user, content='Post', platform='linkedin')
+        future = (timezone.now() + timedelta(days=1)).isoformat()
+
+        response = self.client.patch(f'/posts/{post.id}/schedule/', {'scheduled_at': future}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'scheduled')
+
+    def test_schedule_detects_conflict_same_platform_within_30min(self):
+        slot = timezone.now() + timedelta(days=1)
+        Post.objects.create(
+            user=self.user, content='Déjà programmé', platform='linkedin',
+            status='scheduled', scheduled_at=slot,
+        )
+        post = Post.objects.create(user=self.user, content='Nouveau', platform='linkedin')
+        nearby = (slot + timedelta(minutes=20)).isoformat()
+
+        response = self.client.patch(f'/posts/{post.id}/schedule/', {'scheduled_at': nearby}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn('warning', response.data)
+        post.refresh_from_db()
+        self.assertEqual(post.status, 'draft')
+
+    def test_schedule_no_conflict_different_platform(self):
+        slot = timezone.now() + timedelta(days=1)
+        Post.objects.create(
+            user=self.user, content='Déjà programmé', platform='twitter',
+            status='scheduled', scheduled_at=slot,
+        )
+        post = Post.objects.create(user=self.user, content='Nouveau', platform='linkedin')
+        nearby = (slot + timedelta(minutes=10)).isoformat()
+
+        response = self.client.patch(f'/posts/{post.id}/schedule/', {'scheduled_at': nearby}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'scheduled')
+
+    def test_schedule_force_conflict_bypasses_warning(self):
+        slot = timezone.now() + timedelta(days=1)
+        Post.objects.create(
+            user=self.user, content='Déjà programmé', platform='linkedin',
+            status='scheduled', scheduled_at=slot,
+        )
+        post = Post.objects.create(user=self.user, content='Nouveau', platform='linkedin')
+        nearby = (slot + timedelta(minutes=20)).isoformat()
+
+        response = self.client.patch(
+            f'/posts/{post.id}/schedule/',
+            {'scheduled_at': nearby, 'force_conflict': True},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'scheduled')
