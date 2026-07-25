@@ -64,6 +64,7 @@ class PostGenerateView(APIView):
             article_content=article.content,
             platform=platform,
             style_prompt=style_prompt,
+            user_id=request.user.id,
         )
 
         post = Post.objects.create(

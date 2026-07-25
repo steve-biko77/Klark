@@ -105,6 +105,28 @@ CORS_ALLOW_CREDENTIALS = True
 
 ANTHROPIC_API_KEY = config('ANTHROPIC_API_KEY')
 
+# Routeur IA hybride (SCRUM-29) — voir apps.posts.ai_service.select_model
+MODEL_HAIKU = config('MODEL_HAIKU', default='claude-haiku-4-5-20251001')
+MODEL_SONNET = config('MODEL_SONNET', default='claude-sonnet-5')
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'ai_usage_file': {
+            'class': 'logging.FileHandler',
+            'filename': BASE_DIR / 'ai_usage.log',
+        },
+    },
+    'loggers': {
+        'ai_usage': {
+            'handlers': ['ai_usage_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
+
 # Email — console pour le dev (les emails s'affichent dans le terminal)
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 DEFAULT_FROM_EMAIL = 'noreply@klark.app'
