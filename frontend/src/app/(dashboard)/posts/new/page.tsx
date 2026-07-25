@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { getToken } from '@/lib/auth'
 import { apiFetch } from '@/lib/api'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -23,6 +23,21 @@ function NewPostForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const article_id = searchParams.get('article_id')
+  const edit_id = searchParams.get('edit_id')
+  const isEditing = Boolean(edit_id)
+
+  useEffect(() => {
+    if (!edit_id) return
+    const token = getToken()
+    apiFetch(`/posts/${edit_id}/`, token)
+      .then(post => {
+        setPostId(post.id)
+        setContent(post.content)
+        setPlatform(post.platform)
+        setGenerated(true)
+      })
+      .catch(() => alert('Post introuvable'))
+  }, [edit_id])
 
   async function handleGenerate() {
     setLoading(true)
@@ -60,36 +75,46 @@ function NewPostForm() {
   return (
     <div className="flex flex-col gap-8 max-w-2xl">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Generer un post</h1>
-        <p className="text-gray-500 mt-1">Klark va transformer l'article en post pret a publier</p>
+        <h1 className="text-2xl font-bold text-gray-900">
+          {isEditing ? 'Modifier le post' : 'Generer un post'}
+        </h1>
+        <p className="text-gray-500 mt-1">
+          {isEditing
+            ? 'Modifie le contenu puis sauvegarde'
+            : "Klark va transformer l'article en post pret a publier"}
+        </p>
       </div>
 
-      <div className="bg-white rounded-xl p-6 border border-gray-100 flex flex-col gap-4">
-        <div>
-          <label className="text-sm font-medium text-gray-700 mb-1 block">Plateforme</label>
-          <select
-            value={platform}
-            onChange={e => setPlatform(e.target.value)}
-            className="w-full border border-gray-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      {!isEditing && (
+        <div className="bg-white rounded-xl p-6 border border-gray-100 flex flex-col gap-4">
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-1 block">Plateforme</label>
+            <select
+              value={platform}
+              onChange={e => setPlatform(e.target.value)}
+              className="w-full border border-gray-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="linkedin">LinkedIn</option>
+              <option value="twitter">Twitter / X</option>
+              <option value="blog">Blog</option>
+            </select>
+          </div>
+
+          <button
+            onClick={handleGenerate}
+            disabled={loading}
+            className="bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50"
           >
-            <option value="linkedin">LinkedIn</option>
-            <option value="twitter">Twitter / X</option>
-            <option value="blog">Blog</option>
-          </select>
+            {loading ? 'Generation en cours...' : 'Generer avec Klark'}
+          </button>
         </div>
-
-        <button
-          onClick={handleGenerate}
-          disabled={loading}
-          className="bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50"
-        >
-          {loading ? 'Generation en cours...' : 'Generer avec Klark'}
-        </button>
-      </div>
+      )}
 
       {generated && (
         <div className="bg-white rounded-xl p-6 border border-gray-100 flex flex-col gap-4">
-          <h2 className="text-lg font-semibold text-gray-900">Post genere</h2>
+          <h2 className="text-lg font-semibold text-gray-900">
+            {isEditing ? 'Contenu du post' : 'Post genere'}
+          </h2>
           <textarea
             value={content}
             onChange={e => setContent(e.target.value)}
@@ -104,13 +129,15 @@ function NewPostForm() {
             >
               {saving ? 'Sauvegarde...' : 'Sauvegarder et voir mes posts'}
             </button>
-            <button
-              onClick={handleGenerate}
-              disabled={loading}
-              className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition disabled:opacity-50"
-            >
-              Regenerer
-            </button>
+            {!isEditing && (
+              <button
+                onClick={handleGenerate}
+                disabled={loading}
+                className="flex-1 border border-gray-200 text-gray-600 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                Regenerer
+              </button>
+            )}
           </div>
         </div>
       )}
