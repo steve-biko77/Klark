@@ -78,6 +78,45 @@ class PostGenerateView(APIView):
         return Response(PostSerializer(post).data, status=status.HTTP_201_CREATED)
 
 
+class PostGenerateMultiView(APIView):
+    """Génère un draft par plateforme en une passe (routeur IA → Sonnet, cf. SCRUM-29).
+    Un échec sur une plateforme n'empêche pas les autres de réussir."""
+
+    def post(self, request):
+        article_id = request.data.get('article_id')
+        platforms = request.data.get('platforms', [])
+        if not platforms:
+            return Response({'error': 'platforms requis'}, status=status.HTTP_400_BAD_REQUEST)
+
+        article = get_object_or_404(Article, id=article_id, source__user=request.user)
+
+        try:
+            style_prompt = request.user.profile.style_prompt
+        except Profile.DoesNotExist:
+            style_prompt = ''
+
+        results = []
+        for platform in platforms:
+            try:
+                content = generate_post(
+                    article_title=article.title,
+                    article_content=article.content,
+                    platform=platform,
+                    style_prompt=style_prompt,
+                    user_id=request.user.id,
+                    task_type='multi_format',
+                )
+                post = Post.objects.create(
+                    user=request.user, article=article, content=content,
+                    platform=platform, status='draft',
+                )
+                results.append({'platform': platform, **PostSerializer(post).data})
+            except Exception as e:
+                results.append({'platform': platform, 'error': str(e)})
+
+        return Response({'results': results}, status=status.HTTP_201_CREATED)
+
+
 class PostCalendarView(APIView):
 
     def get(self, request):
