@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.http import JsonResponse
 
-from apps.authentication.views import DashboardStatsView
+from apps.authentication.views import DashboardStatsView, ProfileView
 
 
 def health(request):
@@ -17,4 +17,5 @@ urlpatterns = [
     path('articles/', include('apps.articles.urls')),
     path('posts/', include('apps.posts.urls')),
     path('dashboard/stats/', DashboardStatsView.as_view(), name='dashboard-stats'),
+    path('profile/', ProfileView.as_view(), name='profile'),
 ]

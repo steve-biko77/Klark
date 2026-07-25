@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { getToken } from '@/lib/auth'
 import { apiFetch } from '@/lib/api'
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
-const TONE_OPTIONS = ['Expert', 'Accessible', 'Direct']
 
 type LinkedInStatus = {
   connected: boolean
@@ -29,10 +29,6 @@ export default function SettingsPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [toastType, setToastType] = useState<'success' | 'error'>('success')
 
-  const [tone, setTone] = useState('Expert')
-  const [sector, setSector] = useState('')
-  const [profileSaved, setProfileSaved] = useState(false)
-
   async function loadStatus() {
     const token = getToken()
     try {
@@ -53,9 +49,6 @@ export default function SettingsPage() {
     loadStatus()
 
     if (typeof window !== 'undefined') {
-      setTone(localStorage.getItem('klark_tone') ?? 'Expert')
-      setSector(localStorage.getItem('klark_sector') ?? '')
-
       const params = new URLSearchParams(window.location.search)
       const linkedinParam = params.get('linkedin')
       if (linkedinParam === 'connected') {
@@ -91,13 +84,6 @@ export default function SettingsPage() {
       showToast('Erreur lors de la déconnexion', 'error')
     }
     setDisconnecting(false)
-  }
-
-  function handleSaveProfile() {
-    localStorage.setItem('klark_tone', tone)
-    localStorage.setItem('klark_sector', sector)
-    setProfileSaved(true)
-    setTimeout(() => setProfileSaved(false), 2000)
   }
 
   return (
@@ -172,59 +158,19 @@ export default function SettingsPage() {
       </div>
 
       {/* Profil éditorial */}
-      <div className="bg-white rounded-xl border border-gray-100 p-6 flex flex-col gap-5">
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-gray-900">Profil éditorial</h2>
-            <p className="text-xs text-gray-400 mt-0.5">
-              Klark adaptera le style de vos posts selon ces préférences
-            </p>
-          </div>
-          <span className="text-xs bg-amber-50 text-amber-600 border border-amber-200 px-2.5 py-1 rounded-full font-medium flex-shrink-0">
-            V2
-          </span>
+      <div className="bg-white rounded-xl border border-gray-100 p-6 flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold text-gray-900">Profil éditorial</h2>
+          <p className="text-xs text-gray-400 mt-0.5">
+            Persona, secteur, ton et style — utilisés pour générer vos posts et évaluer vos articles
+          </p>
         </div>
-
-        <div className="flex flex-col gap-4">
-          <div>
-            <label className="text-sm font-medium text-gray-700 mb-2 block">Ton éditorial</label>
-            <div className="flex gap-2">
-              {TONE_OPTIONS.map(t => (
-                <button
-                  key={t}
-                  onClick={() => setTone(t)}
-                  className={`px-4 py-2 text-sm rounded-lg border transition ${
-                    tone === t
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'
-                  }`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="text-sm font-medium text-gray-700 mb-2 block">
-              Secteur d&apos;activité
-            </label>
-            <input
-              type="text"
-              value={sector}
-              onChange={e => setSector(e.target.value)}
-              placeholder="Ex : SaaS B2B, Marketing digital, Finance..."
-              className="w-full border border-gray-200 rounded-lg px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
-
-          <button
-            onClick={handleSaveProfile}
-            className="self-start bg-indigo-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition"
-          >
-            {profileSaved ? 'Enregistré ✓' : 'Enregistrer'}
-          </button>
-        </div>
+        <Link
+          href="/settings/profile"
+          className="shrink-0 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition"
+        >
+          Configurer →
+        </Link>
       </div>
     </div>
   )

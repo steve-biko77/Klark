@@ -190,3 +190,49 @@ class ProfileModelTest(APITestCase):
         Profile.objects.create(user=user, persona='CREATEUR', style_prompt='x', sector='Média', tone='DIRECT')
         with self.assertRaises(Exception):
             Profile.objects.create(user=user, persona='PASSIONNE', style_prompt='y', sector='Tech', tone='ACCESSIBLE')
+
+
+class ProfileEndpointTest(APITestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='profileuser', password='pass')
+        self.client.force_authenticate(user=self.user)
+
+    def test_get_profile_creates_with_defaults_if_missing(self):
+        response = self.client.get('/profile/')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['persona'], 'CREATEUR')
+        self.assertEqual(response.data['tone'], 'EXPERT')
+        self.assertTrue(Profile.objects.filter(user=self.user).exists())
+
+    def test_get_profile_unauthenticated(self):
+        self.client.force_authenticate(user=None)
+        response = self.client.get('/profile/')
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_patch_profile_updates_fields(self):
+        response = self.client.patch('/profile/', {
+            'persona': 'TRADER',
+            'sector': 'Finance et marchés',
+            'tone': 'DIRECT',
+            'style_prompt': 'Posts courts et percutants, je commence par une question provoc.',
+        }, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['persona'], 'TRADER')
+        self.assertEqual(response.data['sector'], 'Finance et marchés')
+        profile = Profile.objects.get(user=self.user)
+        self.assertEqual(profile.persona, 'TRADER')
+        self.assertEqual(profile.tone, 'DIRECT')
+
+    def test_patch_profile_creates_if_missing(self):
+        self.assertFalse(Profile.objects.filter(user=self.user).exists())
+        response = self.client.patch('/profile/', {'sector': 'Tech'}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(Profile.objects.filter(user=self.user).exists())
+
+    def test_patch_profile_rejects_invalid_persona(self):
+        response = self.client.patch('/profile/', {'persona': 'NOT_A_PERSONA'}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

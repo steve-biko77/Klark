@@ -19,8 +19,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from apps.articles.models import Article
 from apps.posts.models import Post
 from apps.sources.models import Source
-from .models import OTPCode
-from .serializers import RegisterSerializer
+from .models import OTPCode, Profile
+from .serializers import ProfileSerializer, RegisterSerializer
 
 
 class RegisterView(APIView):
@@ -244,3 +244,30 @@ class DashboardStatsView(APIView):
             'posts_generes': Post.objects.filter(user=user).count(),
             'articles': Article.objects.filter(source__user=user).count(),
         })
+
+
+class ProfileView(APIView):
+    """
+    Profil éditorial de l'utilisateur (persona, secteur, ton, style_prompt).
+    Utilisé par la génération de posts (style_prompt, cf. apps.posts.services.generate_post)
+    et par le scoring sémantique des articles (persona + secteur).
+    Créé à la volée avec des valeurs par défaut s'il n'existe pas encore.
+    """
+
+    def get(self, request):
+        profile, _ = Profile.objects.get_or_create(
+            user=request.user,
+            defaults={'persona': 'CREATEUR', 'tone': 'EXPERT', 'style_prompt': '', 'sector': ''},
+        )
+        return Response(ProfileSerializer(profile).data)
+
+    def patch(self, request):
+        profile, _ = Profile.objects.get_or_create(
+            user=request.user,
+            defaults={'persona': 'CREATEUR', 'tone': 'EXPERT', 'style_prompt': '', 'sector': ''},
+        )
+        serializer = ProfileSerializer(profile, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
