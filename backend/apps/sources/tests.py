@@ -3,7 +3,9 @@ from django.contrib.auth.models import User
 from rest_framework.test import APITestCase
 from rest_framework import status
 from unittest.mock import patch
+from apps.articles.models import Article
 from .models import Source
+from .services import scrape_source
 
 
 class SourcesViewTest(APITestCase):
@@ -50,3 +52,66 @@ class SourcesViewTest(APITestCase):
     def test_scrape_source_not_found(self):
         response = self.client.post('/sources/9999/scrape/')
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class ScrapeSourceServiceTest(TestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='scrapeuser', password='pass')
+
+    def test_prefers_full_content_over_summary(self):
+        feed_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+<channel>
+  <item>
+    <title>Article Title</title>
+    <link>https://example.com/article-1</link>
+    <description>Short summary only.</description>
+    <content:encoded><![CDATA[<p>Full rich article content.</p>]]></content:encoded>
+  </item>
+</channel>
+</rss>"""
+        source = Source.objects.create(user=self.user, url=feed_xml)
+        scrape_source(source)
+
+        article = Article.objects.get(source=source)
+        self.assertIn('Full rich article content', article.content)
+
+    def test_falls_back_to_summary_when_no_full_content(self):
+        feed_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+<channel>
+  <item>
+    <title>Article Title</title>
+    <link>https://example.com/article-2</link>
+    <description>Only a summary here.</description>
+  </item>
+</channel>
+</rss>"""
+        source = Source.objects.create(user=self.user, url=feed_xml)
+        scrape_source(source)
+
+        article = Article.objects.get(source=source)
+        self.assertEqual(article.content, 'Only a summary here.')
+
+    def test_bozo_feed_with_entries_still_imports_articles(self):
+        feed_xml = """<rss version="2.0"><channel><item>
+<title>A &amp B</title>
+<link>https://example.com/article-3</link>
+<description>Content despite bozo.</description>
+</item></channel></rss>"""
+        source = Source.objects.create(user=self.user, url=feed_xml)
+        result = scrape_source(source)
+
+        self.assertEqual(result['articles_added'], 1)
+        source.refresh_from_db()
+        self.assertEqual(source.status, 'active')
+
+    def test_unparseable_feed_marks_source_error(self):
+        source = Source.objects.create(user=self.user, url='not even xml at all just garbage text')
+        result = scrape_source(source)
+
+        self.assertEqual(result['articles_added'], 0)
+        self.assertIn('error', result)
+        source.refresh_from_db()
+        self.assertEqual(source.status, 'error')

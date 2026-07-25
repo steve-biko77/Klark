@@ -18,10 +18,17 @@ def _parse_published(entry) -> datetime | None:
     return None
 
 
+def _extract_content(entry) -> str:
+    """Préfère le contenu complet (content:encoded) au résumé tronqué."""
+    if entry.get('content'):
+        return entry['content'][0].get('value', '')
+    return entry.get('summary', entry.get('description', ''))
+
+
 def scrape_source(source: Source) -> dict:
     feed = feedparser.parse(source.url)
 
-    if feed.bozo:
+    if feed.bozo and not feed.entries:
         source.status = 'error'
         source.save(update_fields=['status'])
         return {'error': 'Flux RSS invalide', 'articles_added': 0}
@@ -34,7 +41,7 @@ def scrape_source(source: Source) -> dict:
         Article.objects.create(
             source=source,
             title=entry.get('title', 'Sans titre'),
-            content=entry.get('summary', entry.get('description', '')),
+            content=_extract_content(entry),
             url=link,
             score=0.0,
             published_at=_parse_published(entry),
