@@ -17,11 +17,18 @@ from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from django.shortcuts import get_object_or_404
 
 from apps.articles.models import Article
+from apps.articles.serializers import ArticleSerializer
+from apps.articles.services import extract_pdf_text
 from apps.authentication.models import Profile
+from apps.sources.models import Source
 from .models import Post, LinkedInToken
 from .serializers import PostSerializer
 from .services import generate_post
 from .encryption import encrypt
+
+MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024
+MAX_TEXT_CHARS = 10_000
+INGESTED_CONTENT_MAX_CHARS = 4_000
 
 
 class PostListView(APIView):
@@ -115,6 +122,49 @@ class PostGenerateMultiView(APIView):
                 results.append({'platform': platform, 'error': str(e)})
 
         return Response({'results': results}, status=status.HTTP_201_CREATED)
+
+
+class PostIngestView(APIView):
+    """Ingère un PDF ou un texte libre (transcription) comme source alternative
+    au scraping RSS. Crée un Article temporaire rattaché à une Source dédiée
+    'Uploads (PDF/texte)' de l'utilisateur (au lieu de source=None, pour rester
+    compatible avec le filtrage source__user=... utilisé partout ailleurs)."""
+
+    def post(self, request):
+        pdf_file = request.FILES.get('file')
+        text = request.data.get('text', '').strip()
+
+        if not pdf_file and not text:
+            return Response({'error': 'Fournissez un fichier PDF ou du texte.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if pdf_file:
+            if pdf_file.size > MAX_PDF_SIZE_BYTES:
+                return Response({'error': 'Le fichier dépasse 10 Mo.'}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                extracted = extract_pdf_text(pdf_file)
+            except Exception:
+                return Response({'error': 'PDF illisible ou corrompu.'}, status=status.HTTP_400_BAD_REQUEST)
+            title = f"PDF upload — {timezone.now().strftime('%d/%m/%Y')}"
+        else:
+            if len(text) > MAX_TEXT_CHARS:
+                return Response(
+                    {'error': f'Le texte dépasse {MAX_TEXT_CHARS} caractères.'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            extracted = text
+            title = f"Transcription — {timezone.now().strftime('%d/%m/%Y')}"
+
+        content = extracted[:INGESTED_CONTENT_MAX_CHARS]
+        if not content.strip():
+            return Response({'error': 'Aucun texte exploitable trouvé.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        upload_source, _ = Source.objects.get_or_create(
+            user=request.user, url='internal://uploads',
+            defaults={'name': 'Uploads (PDF/texte)', 'type': 'upload', 'status': 'active'},
+        )
+        article = Article.objects.create(source=upload_source, title=title, content=content, url='')
+
+        return Response(ArticleSerializer(article).data, status=status.HTTP_201_CREATED)
 
 
 class PostCalendarView(APIView):
