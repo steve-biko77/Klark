@@ -4,8 +4,12 @@ from datetime import timedelta
 import anthropic
 import fitz
 from django.conf import settings
+from django.core import signing
+from django.core.mail import send_mail
 from django.utils import timezone
+from django.utils.html import strip_tags
 
+from apps.authentication.models import Profile
 from apps.posts.ai_service import log_ai_usage, select_model
 from .models import Alert, Article, DailyBriefing, Notification
 
@@ -124,3 +128,87 @@ def generate_daily_briefing(user) -> DailyBriefing:
     ]
 
     return DailyBriefing.objects.create(user=user, date=today, content=content)
+
+
+UNSUBSCRIBE_TOKEN_SALT = 'klark-digest-unsubscribe'
+UNSUBSCRIBE_TOKEN_MAX_AGE = 60 * 60 * 24 * 30  # 30 jours
+
+
+def make_unsubscribe_token(user_id: int) -> str:
+    return signing.dumps({'user_id': user_id}, salt=UNSUBSCRIBE_TOKEN_SALT)
+
+
+def verify_unsubscribe_token(token: str) -> int | None:
+    try:
+        data = signing.loads(token, salt=UNSUBSCRIBE_TOKEN_SALT, max_age=UNSUBSCRIBE_TOKEN_MAX_AGE)
+        return data['user_id']
+    except signing.BadSignature:
+        return None
+
+
+def build_digest_email_html(signals: list[dict], unsubscribe_url: str) -> str:
+    if not signals:
+        signals_html = '<p style="color:#6b7280;">Peu d\'actualités pertinentes aujourd\'hui.</p>'
+    else:
+        cards = []
+        for s in signals:
+            lines_html = ''.join(
+                f'<p style="margin:0 0 4px;color:#4b5563;font-size:14px;">{line}</p>'
+                for line in s['lines']
+            )
+            post_url = f"{settings.FRONTEND_URL}/posts/new?article_id={s['article_id']}"
+            cards.append(f'''
+                <div style="background:#f9fafb;border-radius:8px;padding:16px;margin-bottom:12px;">
+                  <p style="font-weight:600;margin:0 0 8px;color:#111827;">{s['article_title']}</p>
+                  {lines_html}
+                  <a href="{post_url}" style="display:inline-block;margin-top:8px;color:#4f46e5;font-size:13px;text-decoration:none;">Générer un post →</a>
+                </div>
+            ''')
+        signals_html = ''.join(cards)
+
+    return f'''
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+      <div style="background:#4f46e5;padding:24px;text-align:center;">
+        <h1 style="color:white;margin:0;font-size:20px;">⚡ Klark — Briefing du jour</h1>
+      </div>
+      <div style="padding:24px;background:white;">
+        {signals_html}
+      </div>
+      <div style="padding:16px 24px;text-align:center;font-size:12px;color:#9ca3af;">
+        <a href="{unsubscribe_url}" style="color:#9ca3af;">Se désabonner du digest email</a>
+      </div>
+    </div>
+    '''
+
+
+def maybe_send_daily_digest(user) -> bool:
+    """Envoie le digest email du jour si l'utilisateur a activé email_digest sur
+    son profil. Réutilise le briefing déjà généré aujourd'hui s'il existe (même
+    contenu que le briefing flash dashboard, cf. generate_daily_briefing).
+    Retourne True si un email a effectivement été envoyé."""
+    try:
+        profile = user.profile
+    except Profile.DoesNotExist:
+        return False
+
+    if not profile.email_digest:
+        return False
+
+    briefing = generate_daily_briefing(user)
+    signals = briefing.content
+    count = len(signals)
+    subject = (
+        f"Klark — {count} signal{'aux' if count > 1 else ''} marché d'aujourd'hui"
+        if count else "Klark — votre briefing du jour"
+    )
+    unsubscribe_url = f"{settings.FRONTEND_URL}/unsubscribe?token={make_unsubscribe_token(user.id)}"
+    html_message = build_digest_email_html(signals, unsubscribe_url)
+
+    send_mail(
+        subject=subject,
+        message=strip_tags(html_message),
+        html_message=html_message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+    )
+    return True

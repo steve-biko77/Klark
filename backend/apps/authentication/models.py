@@ -21,6 +21,8 @@ class Profile(models.Model):
     style_prompt = models.TextField(blank=True, default='')
     sector = models.CharField(max_length=100, blank=True, default='')
     tone = models.CharField(max_length=20, choices=TONE_CHOICES)
+    email_digest = models.BooleanField(default=True)
+    digest_hour = models.PositiveSmallIntegerField(default=7)
 
     def __str__(self):
         return f"Profil {self.user} — {self.persona}"

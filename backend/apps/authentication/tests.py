@@ -247,3 +247,19 @@ class ProfileEndpointTest(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['sector'], '')
+
+    def test_profile_defaults_email_digest_enabled(self):
+        response = self.client.get('/profile/')
+        self.assertTrue(response.data['email_digest'])
+        self.assertEqual(response.data['digest_hour'], 7)
+
+    def test_patch_profile_updates_digest_preferences(self):
+        response = self.client.patch('/profile/', {'email_digest': False, 'digest_hour': 8}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data['email_digest'])
+        self.assertEqual(response.data['digest_hour'], 8)
+
+    def test_patch_profile_rejects_digest_hour_out_of_range(self):
+        response = self.client.patch('/profile/', {'digest_hour': 23}, format='json')
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)

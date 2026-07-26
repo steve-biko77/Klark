@@ -7,7 +7,7 @@ from rest_framework import status
 from apps.authentication.models import Profile
 from .models import Alert, Article, DailyBriefing, Notification
 from .serializers import AlertSerializer, ArticleSerializer, DailyBriefingSerializer, NotificationSerializer
-from .services import generate_daily_briefing
+from .services import generate_daily_briefing, maybe_send_daily_digest, verify_unsubscribe_token
 
 MAX_ACTIVE_ALERTS = 10
 
@@ -132,3 +132,31 @@ class BriefingMarkReadView(APIView):
         briefing.is_read = True
         briefing.save(update_fields=['is_read'])
         return Response(DailyBriefingSerializer(briefing).data)
+
+
+class SendDigestView(APIView):
+    """Déclenchement manuel de l'envoi du digest email (respecte la préférence
+    email_digest de l'utilisateur). Déviation assumée : le prompt technique décrit
+    un envoi automatique à 7h via Celery Beat, non disponible pour la même raison
+    que TodayBriefingView (SCRUM-22 en cours ailleurs)."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        sent = maybe_send_daily_digest(request.user)
+        return Response({'sent': sent})
+
+
+class UnsubscribeDigestView(APIView):
+    """Lien de désabonnement cliqué depuis l'email — pas d'authentification requise,
+    le token signé (30 jours) identifie l'utilisateur."""
+    permission_classes = []
+    authentication_classes = []
+
+    def get(self, request):
+        token = request.query_params.get('token', '')
+        user_id = verify_unsubscribe_token(token) if token else None
+        if not user_id:
+            return Response({'error': 'Lien invalide ou expiré'}, status=status.HTTP_400_BAD_REQUEST)
+
+        Profile.objects.filter(user_id=user_id).update(email_digest=False)
+        return Response({'unsubscribed': True})

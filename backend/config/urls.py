@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from apps.authentication.views import DashboardStatsView, ProfileView
 from apps.articles.views import (
     AlertListCreateView, AlertDetailView, NotificationListView, NotificationMarkReadView,
-    TodayBriefingView, BriefingListView, BriefingMarkReadView,
+    TodayBriefingView, BriefingListView, BriefingMarkReadView, SendDigestView, UnsubscribeDigestView,
 )
 
 
@@ -27,6 +27,8 @@ urlpatterns = [
     path('notifications/', NotificationListView.as_view(), name='notifications-list'),
     path('notifications/<int:notification_id>/read/', NotificationMarkReadView.as_view(), name='notification-read'),
     path('briefings/today/', TodayBriefingView.as_view(), name='briefing-today'),
+    path('briefings/send-digest/', SendDigestView.as_view(), name='briefing-send-digest'),
+    path('briefings/unsubscribe/', UnsubscribeDigestView.as_view(), name='briefing-unsubscribe'),
     path('briefings/', BriefingListView.as_view(), name='briefings-list'),
     path('briefings/<int:briefing_id>/read/', BriefingMarkReadView.as_view(), name='briefing-read'),
 ]

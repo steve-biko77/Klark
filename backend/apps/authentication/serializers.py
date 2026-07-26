@@ -6,9 +6,11 @@ from .models import Profile
 
 
 class ProfileSerializer(serializers.ModelSerializer):
+    digest_hour = serializers.IntegerField(min_value=5, max_value=10, required=False)
+
     class Meta:
         model = Profile
-        fields = ['persona', 'style_prompt', 'sector', 'tone']
+        fields = ['persona', 'style_prompt', 'sector', 'tone', 'email_digest', 'digest_hour']
 
 
 class RegisterSerializer(serializers.ModelSerializer):
