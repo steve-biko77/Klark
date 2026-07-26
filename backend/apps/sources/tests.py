@@ -24,7 +24,9 @@ class SourcesViewTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data, [])
 
-    def test_create_source(self):
+    @patch('apps.sources.views.detect_feed_urls')
+    def test_create_source(self, mock_detect):
+        mock_detect.return_value = ['https://example.com/rss']
         data = {'url': 'https://example.com/rss', 'name': 'Test Feed'}
         response = self.client.post('/sources/', data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
