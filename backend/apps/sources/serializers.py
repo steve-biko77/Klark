@@ -1,5 +1,11 @@
 from rest_framework import serializers
-from .models import Source
+from .models import Source, TopicPack
+
+
+class TopicPackSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TopicPack
+        fields = ['id', 'name', 'description', 'persona', 'sources']
 
 
 class SourceSerializer(serializers.ModelSerializer):

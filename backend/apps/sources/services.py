@@ -160,3 +160,23 @@ def scrape_source(source: Source) -> dict:
         'articles_added': articles_added,
         'total_found': len(feed.entries),
     }
+
+
+# ── Topic Packs (SCRUM-27) ───────────────────────────────────────────────────
+
+def activate_topic_pack(pack, user) -> list[Source]:
+    """Crée une Source par entrée du pack (détection RSS auto sur chaque URL,
+    cf. SCRUM-24) et déclenche immédiatement leur scraping. Une entrée sans
+    flux détectable est silencieusement ignorée plutôt que de faire échouer
+    toute l'activation."""
+    created = []
+    for entry in pack.sources:
+        candidates = detect_feed_urls(entry['url'])
+        if not candidates:
+            continue
+        source = Source.objects.create(
+            user=user, url=candidates[0], name=entry.get('name', ''), type='rss', status='pending',
+        )
+        scrape_source(source)
+        created.append(source)
+    return created

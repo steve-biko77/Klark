@@ -33,6 +33,8 @@ const TONE_OPTIONS: { value: Tone; label: string; example: string }[] = [
 
 const DEFAULT_PROFILE: Profile = { persona: 'CREATEUR', style_prompt: '', sector: '', tone: 'EXPERT' }
 
+type TopicPack = { id: number; name: string; description: string; persona: Persona; sources: { name: string; url: string }[] }
+
 export default function ProfileSettingsPage() {
   const [profile, setProfile] = useState<Profile>(DEFAULT_PROFILE)
   const [loading, setLoading] = useState(true)
@@ -42,6 +44,9 @@ export default function ProfileSettingsPage() {
   const [learning, setLearning] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [learnMessage, setLearnMessage] = useState('')
+  const [onboardingPacks, setOnboardingPacks] = useState<TopicPack[] | null>(null)
+  const [activatingPackId, setActivatingPackId] = useState<number | null>(null)
+  const [activatedPackIds, setActivatedPackIds] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     const token = getToken()
@@ -62,10 +67,26 @@ export default function ProfileSettingsPage() {
       setProfile(updated)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
+
+      const packs = await apiFetch(`/topic-packs/?persona=${updated.persona}`, token).catch(() => [])
+      setOnboardingPacks(packs)
     } catch {
       alert('Erreur lors de la sauvegarde du profil')
     }
     setSaving(false)
+  }
+
+  async function handleActivatePack(packId: number) {
+    setActivatingPackId(packId)
+    const token = getToken()
+    try {
+      const result = await apiFetch(`/topic-packs/${packId}/activate/`, token, { method: 'POST' })
+      setActivatedPackIds(prev => new Set(prev).add(packId))
+      alert(`${result.sources.length} source${result.sources.length > 1 ? 's' : ''} ajoutée${result.sources.length > 1 ? 's' : ''} et scrapée${result.sources.length > 1 ? 's' : ''} ✓`)
+    } catch {
+      alert("Erreur lors de l'activation du pack")
+    }
+    setActivatingPackId(null)
   }
 
   async function handleLearnStyle() {
@@ -184,6 +205,44 @@ export default function ProfileSettingsPage() {
           {saved ? 'Enregistré ✓' : saving ? 'Sauvegarde...' : 'Enregistrer'}
         </button>
       </div>
+
+      {onboardingPacks !== null && onboardingPacks.length > 0 && (
+        <div className="bg-white rounded-xl border border-indigo-200 p-6 flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-gray-900">Choisissez vos sources</h2>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Des sources RSS prêtes à l&apos;emploi pour votre profil — active-en une ou plusieurs, ou ignore cette étape.
+              </p>
+            </div>
+            <button
+              onClick={() => setOnboardingPacks([])}
+              className="text-xs text-gray-400 hover:text-gray-600 transition shrink-0"
+            >
+              Ignorer
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {onboardingPacks.map(pack => {
+              const activated = activatedPackIds.has(pack.id)
+              return (
+                <div key={pack.id} className="border border-gray-200 rounded-lg p-4 flex flex-col gap-2">
+                  <p className="text-sm font-semibold text-gray-900">{pack.name}</p>
+                  <p className="text-xs text-gray-500">{pack.description}</p>
+                  <p className="text-xs text-gray-400">{pack.sources.length} sources</p>
+                  <button
+                    onClick={() => handleActivatePack(pack.id)}
+                    disabled={activatingPackId === pack.id || activated}
+                    className="mt-auto text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-full hover:bg-indigo-700 transition disabled:opacity-50"
+                  >
+                    {activated ? 'Activé ✓' : activatingPackId === pack.id ? 'Activation...' : 'Activer'}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-gray-100 p-6 flex flex-col gap-3">
         <div className="flex items-center justify-between">

@@ -11,6 +11,7 @@ from apps.articles.views import (
     SendWeeklyDigestView, UnsubscribeWeeklyDigestView,
 )
 from apps.posts.views import AnalyticsCollectView, AnalyticsOverviewView, AnalyticsRecommendationsView
+from apps.sources.views import TopicPackListView, TopicPackActivateView
 
 
 def health(request):
@@ -43,4 +44,6 @@ urlpatterns = [
     path('analytics/', AnalyticsOverviewView.as_view(), name='analytics-overview'),
     path('analytics/collect/', AnalyticsCollectView.as_view(), name='analytics-collect'),
     path('analytics/recommendations/', AnalyticsRecommendationsView.as_view(), name='analytics-recommendations'),
+    path('topic-packs/', TopicPackListView.as_view(), name='topic-packs-list'),
+    path('topic-packs/<int:pack_id>/activate/', TopicPackActivateView.as_view(), name='topic-pack-activate'),
 ]

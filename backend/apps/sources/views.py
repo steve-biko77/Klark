@@ -3,9 +3,9 @@ from rest_framework.response import Response
 from rest_framework import status
 from django.shortcuts import get_object_or_404
 
-from .models import Source
-from .serializers import SourceSerializer
-from .services import detect_feed_urls, scrape_source
+from .models import Source, TopicPack
+from .serializers import SourceSerializer, TopicPackSerializer
+from .services import activate_topic_pack, detect_feed_urls, scrape_source
 
 
 class SourceListCreateView(APIView):
@@ -67,3 +67,26 @@ class SourceScrapeView(APIView):
         source = get_object_or_404(Source, id=source_id, user=request.user)
         result = scrape_source(source)
         return Response(result)
+
+
+class TopicPackListView(APIView):
+    """GET /topic-packs/?persona=TRADER — packs actifs proposés à l'onboarding
+    (SCRUM-27). Sans filtre persona, retourne tous les packs actifs."""
+
+    def get(self, request):
+        packs = TopicPack.objects.filter(is_active=True)
+        persona = request.query_params.get('persona')
+        if persona:
+            packs = packs.filter(persona=persona)
+        return Response(TopicPackSerializer(packs, many=True).data)
+
+
+class TopicPackActivateView(APIView):
+
+    def post(self, request, pack_id):
+        pack = get_object_or_404(TopicPack, id=pack_id, is_active=True)
+        created = activate_topic_pack(pack, request.user)
+        return Response(
+            {'sources': SourceSerializer(created, many=True).data},
+            status=status.HTTP_201_CREATED,
+        )
