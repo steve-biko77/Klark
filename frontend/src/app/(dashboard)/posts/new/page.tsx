@@ -31,6 +31,8 @@ type PlatformResult = {
   error: string | null
   saving: boolean
   saved: boolean
+  previousContent: string | null
+  applyingCommand: string | null
 }
 
 type ArticleInfo = {
@@ -38,6 +40,16 @@ type ArticleInfo = {
   url: string
   source_name: string
 }
+
+const AI_COMMANDS: { value: string; label: string }[] = [
+  { value: 'shorten', label: 'Raccourcir' },
+  { value: 'expand', label: 'Développer' },
+  { value: 'tone:formal', label: 'Ton formel' },
+  { value: 'tone:casual', label: 'Ton décontracté' },
+  { value: 'angle:question', label: 'Hook → question' },
+  { value: 'angle:stat', label: 'Hook → stat' },
+  { value: 'hashtags', label: '+ Hashtags' },
+]
 
 function NewPostForm() {
   const router = useRouter()
@@ -84,6 +96,31 @@ function NewPostForm() {
   const [editPostId, setEditPostId] = useState<number | null>(null)
   const [editContent, setEditContent] = useState('')
   const [editSaving, setEditSaving] = useState(false)
+  const [editPreviousContent, setEditPreviousContent] = useState<string | null>(null)
+  const [editApplyingCommand, setEditApplyingCommand] = useState<string | null>(null)
+
+  async function handleEditAiCommand(command: string) {
+    if (!editPostId) return
+    setEditApplyingCommand(command)
+    try {
+      const token = getToken()
+      const response = await apiFetch(`/posts/${editPostId}/ai-command/`, token, {
+        method: 'POST',
+        body: JSON.stringify({ command }),
+      })
+      setEditPreviousContent(editContent)
+      setEditContent(response.content)
+    } catch {
+      alert('Erreur lors de l\'exécution de la commande /ai')
+    }
+    setEditApplyingCommand(null)
+  }
+
+  function handleUndoEditCommand() {
+    if (editPreviousContent === null) return
+    setEditContent(editPreviousContent)
+    setEditPreviousContent(null)
+  }
 
   useEffect(() => {
     if (!edit_id) return
@@ -175,6 +212,8 @@ function NewPostForm() {
           error: r.error ?? null,
           saving: false,
           saved: false,
+          previousContent: null,
+          applyingCommand: null,
         }
       }
       setResults(nextResults)
@@ -187,6 +226,40 @@ function NewPostForm() {
 
   function updateResultContent(platform: string, content: string) {
     setResults(prev => ({ ...prev, [platform]: { ...prev[platform], content } }))
+  }
+
+  async function handleAiCommand(platform: string, command: string) {
+    const result = results[platform]
+    if (!result?.postId) return
+    setResults(prev => ({ ...prev, [platform]: { ...prev[platform], applyingCommand: command } }))
+    try {
+      const token = getToken()
+      const response = await apiFetch(`/posts/${result.postId}/ai-command/`, token, {
+        method: 'POST',
+        body: JSON.stringify({ command }),
+      })
+      setResults(prev => ({
+        ...prev,
+        [platform]: {
+          ...prev[platform],
+          previousContent: prev[platform].content,
+          content: response.content,
+          applyingCommand: null,
+        },
+      }))
+    } catch {
+      alert('Erreur lors de l\'exécution de la commande /ai')
+      setResults(prev => ({ ...prev, [platform]: { ...prev[platform], applyingCommand: null } }))
+    }
+  }
+
+  function handleUndoCommand(platform: string) {
+    const result = results[platform]
+    if (!result || result.previousContent === null) return
+    setResults(prev => ({
+      ...prev,
+      [platform]: { ...prev[platform], content: result.previousContent!, previousContent: null },
+    }))
   }
 
   async function handleSaveOne(platform: string) {
@@ -228,6 +301,33 @@ function NewPostForm() {
             rows={10}
             className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
           />
+
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-gray-500">Commandes /ai</span>
+              {editPreviousContent !== null && (
+                <button
+                  onClick={handleUndoEditCommand}
+                  className="text-xs text-indigo-600 hover:underline"
+                >
+                  ↺ Annuler la dernière commande
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {AI_COMMANDS.map(cmd => (
+                <button
+                  key={cmd.value}
+                  onClick={() => handleEditAiCommand(cmd.value)}
+                  disabled={editApplyingCommand !== null}
+                  className="text-xs bg-gray-50 text-gray-600 border border-gray-200 rounded-full px-3 py-1 hover:bg-gray-100 transition disabled:opacity-50"
+                >
+                  {editApplyingCommand === cmd.value ? '…' : cmd.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <button
             onClick={handleSaveEdit}
             disabled={editSaving}
@@ -400,6 +500,33 @@ function NewPostForm() {
                       {results[activeTab].content.length} / {PLATFORM_LIMITS[activeTab]} caractères
                     </span>
                   </div>
+
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-medium text-gray-500">Commandes /ai</span>
+                      {results[activeTab].previousContent !== null && (
+                        <button
+                          onClick={() => handleUndoCommand(activeTab)}
+                          className="text-xs text-indigo-600 hover:underline"
+                        >
+                          ↺ Annuler la dernière commande
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {AI_COMMANDS.map(cmd => (
+                        <button
+                          key={cmd.value}
+                          onClick={() => handleAiCommand(activeTab, cmd.value)}
+                          disabled={results[activeTab].applyingCommand !== null}
+                          className="text-xs bg-gray-50 text-gray-600 border border-gray-200 rounded-full px-3 py-1 hover:bg-gray-100 transition disabled:opacity-50"
+                        >
+                          {results[activeTab].applyingCommand === cmd.value ? '…' : cmd.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="flex gap-3">
                     <button
                       onClick={() => handleSaveOne(activeTab)}

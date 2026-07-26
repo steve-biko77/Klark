@@ -23,7 +23,7 @@ from apps.authentication.models import Profile
 from apps.sources.models import Source
 from .models import Post, LinkedInToken
 from .serializers import PostSerializer
-from .services import generate_post
+from .services import apply_ai_command, generate_post
 from .encryption import encrypt
 
 MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024
@@ -51,6 +51,31 @@ class PostDetailView(APIView):
             serializer.save()
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class PostAICommandView(APIView):
+    """Applique une commande /ai (shorten, expand, tone:formal, tone:casual,
+    angle:question, angle:stat, hashtags) au contenu d'un post existant.
+    Ne modifie pas le post en base — retourne le nouveau texte, à sauvegarder
+    explicitement via PATCH /posts/{id}/ côté frontend (undo facile)."""
+
+    def post(self, request, post_id):
+        post = get_object_or_404(Post, id=post_id, user=request.user)
+        command = request.data.get('command')
+
+        try:
+            style_prompt = request.user.profile.style_prompt
+        except Profile.DoesNotExist:
+            style_prompt = ''
+
+        try:
+            new_content = apply_ai_command(
+                post.content, command, style_prompt=style_prompt, user_id=request.user.id,
+            )
+        except ValueError:
+            return Response({'error': 'Commande /ai inconnue.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({'content': new_content})
 
 
 class PostGenerateView(APIView):

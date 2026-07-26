@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     PostListView, PostDetailView, PostGenerateView, PostGenerateMultiView, PostIngestView,
-    PostCalendarView, PostScheduleView,
+    PostAICommandView, PostCalendarView, PostScheduleView,
     LinkedInAuthView, LinkedInCallbackView, LinkedInStatusView, LinkedInDisconnectView,
 )
 
@@ -17,4 +17,5 @@ urlpatterns = [
     path('linkedin/disconnect/', LinkedInDisconnectView.as_view(), name='linkedin-disconnect'),
     path('<int:post_id>/', PostDetailView.as_view(), name='post-detail'),
     path('<int:post_id>/schedule/', PostScheduleView.as_view(), name='post-schedule'),
+    path('<int:post_id>/ai-command/', PostAICommandView.as_view(), name='post-ai-command'),
 ]
