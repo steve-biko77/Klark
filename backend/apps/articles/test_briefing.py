@@ -88,6 +88,18 @@ class GenerateDailyBriefingServiceTest(TestCase):
 
         self.assertEqual(briefing.content, [])
 
+    @patch('apps.articles.services.anthropic.Anthropic')
+    def test_ai_failure_on_one_article_does_not_crash_whole_briefing(self, mock_anthropic_cls):
+        mock_anthropic_cls.side_effect = Exception('Error code: 401 - invalid x-api-key')
+
+        Article.objects.create(
+            source=self.source, title='Signal en échec', content='...', url='https://a.com/1', score=90,
+        )
+
+        briefing = generate_daily_briefing(self.user)
+
+        self.assertEqual(briefing.content, [])
+
 
 class BriefingEndpointTest(APITestCase):
 

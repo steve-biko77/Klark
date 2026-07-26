@@ -70,3 +70,12 @@ class PostAICommandViewTest(APITestCase):
         self.client.force_authenticate(user=None)
         response = self.client.post(f'/posts/{self.post.id}/ai-command/', {'command': 'shorten'}, format='json')
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    @patch('apps.posts.views.apply_ai_command')
+    def test_ai_failure_returns_503_not_500(self, mock_apply):
+        mock_apply.side_effect = Exception('Error code: 401 - invalid x-api-key')
+
+        response = self.client.post(f'/posts/{self.post.id}/ai-command/', {'command': 'shorten'}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertIn('error', response.data)

@@ -54,6 +54,17 @@ class PostsViewTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     @patch('apps.posts.views.generate_post')
+    def test_generate_post_ai_failure_returns_503_not_500(self, mock_generate):
+        mock_generate.side_effect = Exception('Error code: 401 - invalid x-api-key')
+        data = {'article_id': self.article.id, 'platform': 'linkedin'}
+
+        response = self.client.post('/posts/generate/', data, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertIn('error', response.data)
+        self.assertEqual(Post.objects.filter(user=self.user).count(), 0)
+
+    @patch('apps.posts.views.generate_post')
     def test_generate_post_injects_profile_style_prompt(self, mock_generate):
         mock_generate.return_value = 'Contenu'
         Profile.objects.create(
@@ -162,6 +173,38 @@ class ScheduleEndpointTest(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data['status'], 'scheduled')
+
+    def test_reschedule_rejected_when_current_slot_less_than_1h_away(self):
+        post = Post.objects.create(
+            user=self.user, content='Trop tard pour modifier', platform='linkedin',
+            status='scheduled', scheduled_at=timezone.now() + timedelta(minutes=30),
+        )
+        new_slot = (timezone.now() + timedelta(days=3)).isoformat()
+
+        response = self.client.patch(f'/posts/{post.id}/schedule/', {'scheduled_at': new_slot}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        post.refresh_from_db()
+        self.assertNotEqual(post.scheduled_at.isoformat(), new_slot)
+
+    def test_reschedule_allowed_when_current_slot_more_than_1h_away(self):
+        post = Post.objects.create(
+            user=self.user, content='Encore le temps', platform='linkedin',
+            status='scheduled', scheduled_at=timezone.now() + timedelta(hours=2),
+        )
+        new_slot = (timezone.now() + timedelta(days=3)).isoformat()
+
+        response = self.client.patch(f'/posts/{post.id}/schedule/', {'scheduled_at': new_slot}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_first_time_scheduling_a_draft_is_not_subject_to_1h_rule(self):
+        post = Post.objects.create(user=self.user, content='Jamais programmé', platform='linkedin', status='draft')
+        new_slot = (timezone.now() + timedelta(minutes=45)).isoformat()
+
+        response = self.client.patch(f'/posts/{post.id}/schedule/', {'scheduled_at': new_slot}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
 
 
 @override_settings(LINKEDIN_CLIENT_ID='mock')

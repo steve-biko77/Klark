@@ -118,14 +118,17 @@ def generate_daily_briefing(user) -> DailyBriefing:
         source__user=user, score__gt=BRIEFING_SCORE_THRESHOLD, created_at__gte=since,
     ).order_by('-score')[:BRIEFING_MAX_SIGNALS]
 
-    content = [
-        {
+    content = []
+    for article in articles:
+        try:
+            lines = _summarize_signal(article, user.id)
+        except Exception:
+            continue
+        content.append({
             'article_id': article.id,
             'article_title': article.title,
-            'lines': _summarize_signal(article, user.id),
-        }
-        for article in articles
-    ]
+            'lines': lines,
+        })
 
     return DailyBriefing.objects.create(user=user, date=today, content=content)
 

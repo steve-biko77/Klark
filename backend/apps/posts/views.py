@@ -77,6 +77,11 @@ class PostAICommandView(APIView):
             )
         except ValueError:
             return Response({'error': 'Commande /ai inconnue.'}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception:
+            return Response(
+                {'error': "Le service de génération IA est momentanément indisponible. Réessayez."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         return Response({'content': new_content})
 
@@ -94,13 +99,19 @@ class PostGenerateView(APIView):
         except Profile.DoesNotExist:
             style_prompt = ''
 
-        content = generate_post(
-            article_title=article.title,
-            article_content=article.content,
-            platform=platform,
-            style_prompt=style_prompt,
-            user_id=request.user.id,
-        )
+        try:
+            content = generate_post(
+                article_title=article.title,
+                article_content=article.content,
+                platform=platform,
+                style_prompt=style_prompt,
+                user_id=request.user.id,
+            )
+        except Exception:
+            return Response(
+                {'error': "Le service de génération IA est momentanément indisponible. Réessayez."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
 
         post = Post.objects.create(
             user=request.user,
@@ -231,6 +242,7 @@ class PostCalendarView(APIView):
 class PostScheduleView(APIView):
 
     CONFLICT_WINDOW_MINUTES = 30
+    RESCHEDULE_LOCK_MINUTES = 60
 
     def patch(self, request, post_id):
         post = get_object_or_404(Post, id=post_id, user=request.user)
@@ -251,6 +263,14 @@ class PostScheduleView(APIView):
                 {'error': 'Impossible de programmer dans le passé'},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        if post.status == 'scheduled' and post.scheduled_at:
+            lock_window = datetime.timedelta(minutes=self.RESCHEDULE_LOCK_MINUTES)
+            if post.scheduled_at - timezone.now() < lock_window:
+                return Response(
+                    {'error': 'Trop tard pour modifier — publication prévue dans moins d\'1h'},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         if not force_conflict:
             window = datetime.timedelta(minutes=self.CONFLICT_WINDOW_MINUTES)
