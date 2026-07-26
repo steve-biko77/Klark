@@ -20,12 +20,16 @@ async function refreshAccessToken(): Promise<string | null> {
 }
 
 export async function apiFetch(path: string, token: string, options: RequestInit = {}) {
+  // FormData (upload de fichier) : laisser le navigateur poser son propre
+  // Content-Type (multipart/form-data; boundary=...), sinon l'upload échoue.
+  const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData
+
   const makeRequest = (t: string) =>
     fetch(`${BASE_URL}${path}`, {
       ...options,
       redirect: 'follow',
       headers: {
-        'Content-Type': 'application/json',
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         'Authorization': `Bearer ${t}`,
         ...options.headers,
       },

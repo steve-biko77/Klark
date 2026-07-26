@@ -42,9 +42,43 @@ type ArticleInfo = {
 function NewPostForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const article_id = searchParams.get('article_id')
+  const articleIdFromUrl = searchParams.get('article_id')
   const edit_id = searchParams.get('edit_id')
   const isEditing = Boolean(edit_id)
+
+  // --- Source de génération : article existant, ou PDF/texte ingéré (SCRUM-35) ---
+  const [inputMode, setInputMode] = useState<'article' | 'upload'>(articleIdFromUrl ? 'article' : 'upload')
+  const [article_id, setArticleId] = useState<string | null>(articleIdFromUrl)
+  const [uploadText, setUploadText] = useState('')
+  const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [ingesting, setIngesting] = useState(false)
+  const [ingestPreview, setIngestPreview] = useState<string | null>(null)
+  const [ingestError, setIngestError] = useState('')
+
+  async function handleIngest() {
+    if (!uploadFile && !uploadText.trim()) return
+    setIngesting(true)
+    setIngestError('')
+    try {
+      const token = getToken()
+      let response
+      if (uploadFile) {
+        const formData = new FormData()
+        formData.append('file', uploadFile)
+        response = await apiFetch('/posts/ingest/', token, { method: 'POST', body: formData })
+      } else {
+        response = await apiFetch('/posts/ingest/', token, {
+          method: 'POST',
+          body: JSON.stringify({ text: uploadText.trim() }),
+        })
+      }
+      setArticleId(String(response.id))
+      setIngestPreview(response.content)
+    } catch {
+      setIngestError('Impossible de traiter ce fichier ou ce texte (PDF illisible, trop volumineux, ou texte trop long).')
+    }
+    setIngesting(false)
+  }
 
   // --- Mode édition d'un brouillon existant (post unique) ---
   const [editPostId, setEditPostId] = useState<number | null>(null)
@@ -214,6 +248,82 @@ function NewPostForm() {
         <p className="text-gray-500 mt-1">Klark va transformer l&apos;article en post pret a publier</p>
       </div>
 
+      <div className="flex gap-2 border-b border-gray-100">
+        {articleIdFromUrl && (
+          <button
+            onClick={() => setInputMode('article')}
+            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition ${
+              inputMode === 'article'
+                ? 'border-indigo-600 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Depuis l&apos;article
+          </button>
+        )}
+        <button
+          onClick={() => setInputMode('upload')}
+          className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition ${
+            inputMode === 'upload'
+              ? 'border-indigo-600 text-indigo-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          Depuis un PDF ou texte
+        </button>
+      </div>
+
+      {inputMode === 'upload' && (
+        <div className="bg-white rounded-xl p-6 border border-gray-100 flex flex-col gap-4">
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Fichier PDF (max 10 Mo)</label>
+            <input
+              type="file"
+              accept="application/pdf"
+              onChange={e => {
+                setUploadFile(e.target.files?.[0] ?? null)
+                setUploadText('')
+              }}
+              className="w-full text-sm"
+            />
+          </div>
+          <p className="text-center text-xs text-gray-400">— ou —</p>
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">
+              Transcription (texte libre, max 10 000 caractères)
+            </label>
+            <textarea
+              value={uploadText}
+              onChange={e => {
+                setUploadText(e.target.value.slice(0, 10_000))
+                setUploadFile(null)
+              }}
+              rows={6}
+              placeholder="Colle ici la transcription d'une conférence, un rapport..."
+              className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
+            />
+            <p className="text-xs text-gray-400 mt-1">{uploadText.length} / 10 000 caractères</p>
+          </div>
+
+          {ingestError && <p className="text-sm text-red-500">{ingestError}</p>}
+
+          <button
+            onClick={handleIngest}
+            disabled={ingesting || (!uploadFile && !uploadText.trim())}
+            className="bg-indigo-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50"
+          >
+            {ingesting ? 'Extraction en cours...' : 'Extraire le texte'}
+          </button>
+
+          {ingestPreview && (
+            <div className="border border-gray-200 rounded-lg p-3 max-h-40 overflow-y-auto">
+              <p className="text-xs font-medium text-gray-500 mb-1">Texte extrait (aperçu) :</p>
+              <p className="text-xs text-gray-600 whitespace-pre-wrap">{ingestPreview}</p>
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="bg-white rounded-xl p-6 border border-gray-100 flex flex-col gap-4">
         <div>
           <label className="text-sm font-medium text-gray-700 mb-2 block">Plateformes</label>
@@ -241,7 +351,7 @@ function NewPostForm() {
 
         <button
           onClick={handleGenerate}
-          disabled={loading || selectedPlatforms.length === 0}
+          disabled={loading || selectedPlatforms.length === 0 || !article_id}
           className="bg-indigo-600 text-white py-3 rounded-lg font-medium hover:bg-indigo-700 transition disabled:opacity-50"
         >
           {loading ? 'Generation en cours...' : 'Generer avec Klark'}

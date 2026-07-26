@@ -82,7 +82,7 @@ export default function AlertsSettingsPage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Alertes mots-clés</h1>
         <p className="text-gray-500 mt-1">
-          Sois notifié dès qu'un article contient un de tes mots-clés. {activeCount}/{MAX_ACTIVE_ALERTS} alertes actives.
+          Sois notifié dès qu&apos;un article contient un de tes mots-clés. {activeCount}/{MAX_ACTIVE_ALERTS} alertes actives.
         </p>
       </div>
 
