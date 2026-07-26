@@ -269,5 +269,54 @@ class ProfileView(APIView):
         serializer = ProfileSerializer(profile, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
+            if 'style_prompt' in request.data:
+                # L'édition manuelle du style_prompt devient la nouvelle valeur
+                # de référence pour le bouton "Réinitialiser" (SCRUM-39).
+                profile.style_prompt_manual = serializer.validated_data.get('style_prompt', '')
+                profile.save(update_fields=['style_prompt_manual'])
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class GamificationView(APIView):
+    """Widget dashboard : streak éditorial + score d'influence (SCRUM-37). Le
+    streak est toujours recalculé à la demande depuis Post.published_at ; le
+    score d'influence n'est recalculé que si la dernière mise à jour date de
+    plus de 7 jours (équivalent hebdomadaire, cf. services.maybe_update_influence_score)."""
+
+    def get(self, request):
+        from apps.posts.services import maybe_update_influence_score, should_remind_publish_today, update_streak
+
+        update_streak(request.user)
+        profile = maybe_update_influence_score(request.user)
+        return Response({
+            'streak_current': profile.streak_current,
+            'streak_max': profile.streak_max,
+            'influence_score': profile.influence_score,
+            'influence_score_previous': profile.influence_score_previous,
+            'influence_score_trend': profile.influence_score - profile.influence_score_previous,
+            'remind_publish_today': should_remind_publish_today(request.user),
+        })
+
+
+class LearnStyleView(APIView):
+    """Déclenchement manuel de l'apprentissage de style (SCRUM-39) — déviation
+    assumée : la tâche Celery Beat dimanche 23h n'est pas disponible tant que
+    SCRUM-22 n'est pas mergé."""
+
+    def post(self, request):
+        from apps.posts.services import update_style_memory
+
+        profile = update_style_memory(request.user)
+        if profile is None:
+            return Response({'updated': False, 'message': 'Pas assez de posts publiés (minimum 5).'})
+        return Response({'updated': True, **ProfileSerializer(profile).data})
+
+
+class ResetStyleView(APIView):
+
+    def post(self, request):
+        from apps.posts.services import reset_style_prompt
+
+        profile = reset_style_prompt(request.user)
+        return Response(ProfileSerializer(profile).data)

@@ -151,6 +151,7 @@ function NewPostForm() {
 
   // --- Mode génération (multi-plateforme) ---
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['linkedin'])
+  const [formatSuggestion, setFormatSuggestion] = useState('')
   const [loading, setLoading] = useState(false)
   const [results, setResults] = useState<Record<string, PlatformResult>>({})
   const [activeTab, setActiveTab] = useState<string | null>(null)
@@ -169,6 +170,23 @@ function NewPostForm() {
       }))
       .catch(() => setArticleInfo(null))
   }, [article_id])
+
+  useEffect(() => {
+    const token = getToken()
+    apiFetch('/analytics/recommendations/', token)
+      .then(data => {
+        type Reco = { dimension: string; valeur_optimale: string }
+        const recos: Reco[] = data.recommendations ?? []
+        const jour = recos.find(r => r.dimension === 'jour')
+        const heure = recos.find(r => r.dimension === 'heure')
+        if (jour && heure) {
+          setFormatSuggestion(`D'après vos données, le ${jour.valeur_optimale} en ${heure.valeur_optimale} est votre meilleur créneau.`)
+        } else if (jour) {
+          setFormatSuggestion(`D'après vos données, le ${jour.valeur_optimale} est votre meilleur jour pour publier.`)
+        }
+      })
+      .catch(() => setFormatSuggestion(''))
+  }, [])
 
   function insertIntoActiveTab(text: string) {
     if (!activeTab) return
@@ -447,6 +465,9 @@ function NewPostForm() {
               </label>
             ))}
           </div>
+          {formatSuggestion && (
+            <p className="text-xs text-indigo-500 mt-2">💡 {formatSuggestion}</p>
+          )}
         </div>
 
         <button

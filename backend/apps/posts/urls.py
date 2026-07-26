@@ -19,3 +19,6 @@ urlpatterns = [
     path('<int:post_id>/schedule/', PostScheduleView.as_view(), name='post-schedule'),
     path('<int:post_id>/ai-command/', PostAICommandView.as_view(), name='post-ai-command'),
 ]
+
+# NB : les routes /analytics/* et /gamification/ sont montées au niveau racine
+# (config/urls.py), pas ici, pour matcher les chemins attendus côté frontend.

@@ -23,6 +23,8 @@ class Post(models.Model):
     platform = models.TextField(choices=PLATFORM_CHOICES, default='linkedin')
     status = models.TextField(choices=STATUS_CHOICES, default='draft')
     scheduled_at = models.DateTimeField(null=True, blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+    post_urn = models.TextField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -30,6 +32,25 @@ class Post(models.Model):
 
     def __str__(self):
         return f"{self.platform} — {self.content[:50]}"
+
+
+class Analytics(models.Model):
+    """Métriques d'engagement LinkedIn d'un post publié (SCRUM-36). Une ligne par
+    collecte (pas de OneToOne) pour permettre la courbe d'évolution 30 jours."""
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name='analytics')
+    likes = models.PositiveIntegerField(default=0)
+    views = models.PositiveIntegerField(default=0)
+    shares = models.PositiveIntegerField(default=0)
+    comments = models.PositiveIntegerField(default=0)
+    engagement_rate = models.FloatField(default=0.0)
+    collected_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-collected_at']
+        verbose_name_plural = 'Analytics'
+
+    def __str__(self):
+        return f"Analytics {self.post_id} — {self.collected_at:%Y-%m-%d}"
 
 
 class LinkedInToken(models.Model):

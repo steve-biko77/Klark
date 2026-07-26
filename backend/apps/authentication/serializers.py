@@ -7,10 +7,14 @@ from .models import Profile
 
 class ProfileSerializer(serializers.ModelSerializer):
     digest_hour = serializers.IntegerField(min_value=5, max_value=10, required=False)
+    style_history = serializers.JSONField(read_only=True)
 
     class Meta:
         model = Profile
-        fields = ['persona', 'style_prompt', 'sector', 'tone', 'email_digest', 'digest_hour']
+        fields = [
+            'persona', 'style_prompt', 'sector', 'tone', 'email_digest', 'digest_hour',
+            'weekly_digest', 'style_history',
+        ]
 
 
 class RegisterSerializer(serializers.ModelSerializer):

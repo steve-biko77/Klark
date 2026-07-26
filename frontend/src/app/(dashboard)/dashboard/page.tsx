@@ -33,12 +33,22 @@ type Briefing = {
   content: BriefingSignal[]
 }
 
+type Gamification = {
+  streak_current: number
+  streak_max: number
+  influence_score: number
+  influence_score_previous: number
+  influence_score_trend: number
+  remind_publish_today: boolean
+}
+
 export default function DashboardPage() {
   const router = useRouter()
   const [username, setUsername] = useState('')
   const [stats, setStats] = useState<Stats | null>(null)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [briefing, setBriefing] = useState<Briefing | null>(null)
+  const [gamification, setGamification] = useState<Gamification | null>(null)
 
   useEffect(() => {
     setUsername(getUsername())
@@ -52,6 +62,9 @@ export default function DashboardPage() {
     apiFetch('/briefings/today/', token)
       .then(data => setBriefing(data))
       .catch(() => setBriefing(null))
+    apiFetch('/gamification/', token)
+      .then(data => setGamification(data))
+      .catch(() => setGamification(null))
   }, [])
 
   async function handleNotificationClick(notification: Notification) {
@@ -115,6 +128,39 @@ export default function DashboardPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {gamification && (gamification.streak_current > 0 || gamification.influence_score > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="bg-white rounded-xl p-6 border border-gray-100 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Votre série</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {gamification.streak_current} jour{gamification.streak_current > 1 ? 's' : ''}
+                {gamification.streak_current > 7 && ' 🔥'}
+              </p>
+              {gamification.remind_publish_today && (
+                <p className="text-xs text-amber-600 mt-1">Publiez aujourd&apos;hui pour maintenir votre série</p>
+              )}
+            </div>
+            <span className="text-3xl">🔥</span>
+          </div>
+          <div className="bg-white rounded-xl p-6 border border-gray-100 flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-500">Score d&apos;influence</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">
+                {gamification.influence_score}
+                <span className="text-sm text-gray-400"> / 1000</span>
+              </p>
+              {gamification.influence_score_trend !== 0 && (
+                <p className={`text-xs mt-1 ${gamification.influence_score_trend > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                  {gamification.influence_score_trend > 0 ? '+' : ''}{gamification.influence_score_trend} vs semaine dernière
+                </p>
+              )}
+            </div>
+            <span className="text-3xl">📈</span>
+          </div>
         </div>
       )}
 

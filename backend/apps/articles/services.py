@@ -1,5 +1,5 @@
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import anthropic
 import fitz
@@ -206,6 +206,161 @@ def maybe_send_daily_digest(user) -> bool:
 
     send_mail(
         subject=subject,
+        message=strip_tags(html_message),
+        html_message=html_message,
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[user.email],
+    )
+    return True
+
+
+# ── Digest hebdomadaire (SCRUM-40) ───────────────────────────────────────────
+#
+# Réutilise l'architecture email du digest matinal (SCRUM-32). Déviation
+# assumée : tâche Celery Beat chaque lundi 8h dans le prompt technique — non
+# disponible (SCRUM-22). Déclenchement manuel via POST /briefings/send-weekly-digest/.
+
+WEEKLY_UNSUBSCRIBE_TOKEN_SALT = 'klark-weekly-digest-unsubscribe'
+
+
+def make_weekly_unsubscribe_token(user_id: int) -> str:
+    return signing.dumps({'user_id': user_id}, salt=WEEKLY_UNSUBSCRIBE_TOKEN_SALT)
+
+
+def verify_weekly_unsubscribe_token(token: str) -> int | None:
+    try:
+        data = signing.loads(token, salt=WEEKLY_UNSUBSCRIBE_TOKEN_SALT, max_age=UNSUBSCRIBE_TOKEN_MAX_AGE)
+        return data['user_id']
+    except signing.BadSignature:
+        return None
+
+
+def gather_weekly_stats(user) -> dict:
+    """Statistiques de la semaine écoulée (lundi-dimanche précédent, Europe/Paris) :
+    posts générés/publiés, engagement moyen, streak, score d'influence + tendance,
+    meilleur post de la semaine."""
+    from apps.posts.models import Analytics, Post
+    from apps.posts.services import USER_TIMEZONE
+
+    now_local = timezone.localtime(timezone.now(), USER_TIMEZONE)
+    this_monday = now_local.date() - timedelta(days=now_local.weekday())
+    last_monday = this_monday - timedelta(days=7)
+    week_start = timezone.make_aware(datetime.combine(last_monday, datetime.min.time()), USER_TIMEZONE)
+    week_end = timezone.make_aware(datetime.combine(this_monday, datetime.min.time()), USER_TIMEZONE)
+
+    posts_generated = Post.objects.filter(user=user, created_at__gte=week_start, created_at__lt=week_end).count()
+    published_qs = Post.objects.filter(
+        user=user, status='published', published_at__gte=week_start, published_at__lt=week_end,
+    )
+    posts_published = published_qs.count()
+
+    week_analytics = list(Analytics.objects.filter(post__in=published_qs).select_related('post'))
+    rates = [a.engagement_rate for a in week_analytics]
+    avg_engagement_rate = round(sum(rates) / len(rates), 2) if rates else 0.0
+    best = max(week_analytics, key=lambda a: a.engagement_rate, default=None)
+
+    profile = getattr(user, 'profile', None)
+
+    return {
+        'posts_generated': posts_generated,
+        'posts_published': posts_published,
+        'avg_engagement_rate': avg_engagement_rate,
+        'streak_current': profile.streak_current if profile else 0,
+        'influence_score': profile.influence_score if profile else 0,
+        'influence_score_trend': (profile.influence_score - profile.influence_score_previous) if profile else 0,
+        'best_post': {
+            'content_excerpt': best.post.content[:150], 'engagement_rate': best.engagement_rate,
+        } if best else None,
+    }
+
+
+def _weekly_recommendation(stats: dict, user_id) -> str:
+    prompt = f"""Voici les statistiques hebdomadaires d'un créateur de contenu sur Klark :
+- Posts générés : {stats['posts_generated']}
+- Posts publiés : {stats['posts_published']}
+- Taux d'engagement moyen : {stats['avg_engagement_rate']}%
+- Série en cours : {stats['streak_current']} jours
+- Score d'influence : {stats['influence_score']} (variation : {stats['influence_score_trend']:+d})
+
+En UNE phrase courte et actionnable, donne une recommandation personnalisée pour la
+semaine à venir basée sur ces données (ou un mot d'encouragement adapté si aucun post
+n'a été publié). Réponds uniquement avec la phrase, sans introduction."""
+
+    model = select_model('weekly_digest')
+    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    message = client.messages.create(
+        model=model, max_tokens=150, messages=[{'role': 'user', 'content': prompt}],
+    )
+    log_ai_usage(
+        model=model, tokens_in=message.usage.input_tokens, tokens_out=message.usage.output_tokens,
+        task_type='weekly_digest', user_id=user_id,
+    )
+    return message.content[0].text.strip()
+
+
+def build_weekly_digest_email_html(stats: dict, recommendation: str, unsubscribe_url: str) -> str:
+    flame = ' 🔥' if stats['streak_current'] > 7 else ''
+    if stats['best_post']:
+        best_html = f'''
+          <div style="background:#f9fafb;border-radius:8px;padding:16px;margin-bottom:16px;">
+            <p style="margin:0 0 8px;color:#4b5563;">{stats['best_post']['content_excerpt']}</p>
+            <p style="margin:0;font-weight:600;color:#111827;">{stats['best_post']['engagement_rate']}% d'engagement</p>
+          </div>
+        '''
+    else:
+        best_html = '<p style="color:#6b7280;">Aucun post publié cette semaine.</p>'
+
+    trend = stats['influence_score_trend']
+    trend_html = f"{'+' if trend >= 0 else ''}{trend}"
+
+    return f'''
+    <div style="font-family:sans-serif;max-width:600px;margin:0 auto;">
+      <div style="background:#4f46e5;padding:24px;text-align:center;">
+        <h1 style="color:white;margin:0;font-size:20px;">📊 Klark — Votre semaine en chiffres</h1>
+      </div>
+      <div style="padding:24px;background:white;">
+        <p style="color:#4b5563;">
+          {stats['posts_generated']} posts générés · {stats['posts_published']} posts publiés ·
+          {stats['avg_engagement_rate']}% d'engagement moyen
+        </p>
+
+        <h2 style="font-size:16px;color:#111827;">🏆 Votre meilleur post</h2>
+        {best_html}
+
+        <h2 style="font-size:16px;color:#111827;">🔥 Votre série</h2>
+        <p style="color:#4b5563;">
+          Série en cours : {stats['streak_current']} jours{flame} · Score d'influence : {stats['influence_score']} ({trend_html})
+        </p>
+
+        <h2 style="font-size:16px;color:#111827;">💡 Recommandation</h2>
+        <p style="color:#4b5563;">{recommendation}</p>
+      </div>
+      <div style="padding:16px 24px;text-align:center;font-size:12px;color:#9ca3af;">
+        <a href="{unsubscribe_url}" style="color:#9ca3af;">Se désabonner du digest hebdomadaire</a>
+      </div>
+    </div>
+    '''
+
+
+def maybe_send_weekly_digest(user) -> bool:
+    """Envoie le digest hebdomadaire si weekly_digest est activé sur le profil.
+    Retourne True si un email a effectivement été envoyé."""
+    try:
+        profile = user.profile
+    except Profile.DoesNotExist:
+        return False
+    if not profile.weekly_digest:
+        return False
+
+    stats = gather_weekly_stats(user)
+    recommendation = _weekly_recommendation(stats, user.id)
+    unsubscribe_url = (
+        f"{settings.FRONTEND_URL}/unsubscribe?type=weekly&token={make_weekly_unsubscribe_token(user.id)}"
+    )
+    html_message = build_weekly_digest_email_html(stats, recommendation, unsubscribe_url)
+
+    send_mail(
+        subject='Klark — Votre bilan hebdomadaire',
         message=strip_tags(html_message),
         html_message=html_message,
         from_email=settings.DEFAULT_FROM_EMAIL,

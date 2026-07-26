@@ -9,11 +9,14 @@ const HOUR_OPTIONS = [5, 6, 7, 8, 9, 10]
 export default function NotificationsSettingsPage() {
   const [emailDigest, setEmailDigest] = useState(true)
   const [digestHour, setDigestHour] = useState(7)
+  const [weeklyDigest, setWeeklyDigest] = useState(true)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [sending, setSending] = useState(false)
   const [sendResult, setSendResult] = useState('')
+  const [sendingWeekly, setSendingWeekly] = useState(false)
+  const [sendWeeklyResult, setSendWeeklyResult] = useState('')
 
   useEffect(() => {
     const token = getToken()
@@ -21,6 +24,7 @@ export default function NotificationsSettingsPage() {
       .then(profile => {
         setEmailDigest(profile.email_digest)
         setDigestHour(profile.digest_hour)
+        setWeeklyDigest(profile.weekly_digest)
       })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -32,7 +36,7 @@ export default function NotificationsSettingsPage() {
     try {
       await apiFetch('/profile/', token, {
         method: 'PATCH',
-        body: JSON.stringify({ email_digest: emailDigest, digest_hour: digestHour }),
+        body: JSON.stringify({ email_digest: emailDigest, digest_hour: digestHour, weekly_digest: weeklyDigest }),
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -53,6 +57,19 @@ export default function NotificationsSettingsPage() {
       setSendResult('Erreur lors de l\'envoi.')
     }
     setSending(false)
+  }
+
+  async function handleSendWeeklyNow() {
+    setSendingWeekly(true)
+    setSendWeeklyResult('')
+    const token = getToken()
+    try {
+      const response = await apiFetch('/briefings/send-weekly-digest/', token, { method: 'POST' })
+      setSendWeeklyResult(response.sent ? 'Bilan hebdo envoyé ✓' : 'Digest hebdo désactivé — active-le puis réessaie.')
+    } catch {
+      setSendWeeklyResult('Erreur lors de l\'envoi.')
+    }
+    setSendingWeekly(false)
   }
 
   if (loading) {
@@ -123,6 +140,42 @@ export default function NotificationsSettingsPage() {
           {sending ? 'Envoi...' : 'Envoyer le digest maintenant'}
         </button>
         {sendResult && <p className="text-xs text-gray-500">{sendResult}</p>}
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-100 p-6 flex flex-col gap-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-gray-900">Bilan hebdomadaire</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Chaque lundi : posts publiés, engagement, série et score d&apos;influence de la semaine
+            </p>
+          </div>
+          <button
+            onClick={() => setWeeklyDigest(v => !v)}
+            className={`w-11 h-6 rounded-full transition relative ${weeklyDigest ? 'bg-indigo-600' : 'bg-gray-200'}`}
+          >
+            <span
+              className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${
+                weeklyDigest ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </button>
+        </div>
+
+        <p className="text-xs text-gray-400 -mt-2">
+          Le bouton &quot;Enregistrer&quot; de la section digest matinal ci-dessus sauvegarde aussi ce réglage.
+        </p>
+
+        <div className="border-t border-gray-100 pt-4 flex flex-col gap-2">
+          <button
+            onClick={handleSendWeeklyNow}
+            disabled={sendingWeekly}
+            className="self-start border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition disabled:opacity-50"
+          >
+            {sendingWeekly ? 'Envoi...' : 'Envoyer le bilan hebdo maintenant'}
+          </button>
+          {sendWeeklyResult && <p className="text-xs text-gray-500">{sendWeeklyResult}</p>}
+        </div>
       </div>
     </div>
   )

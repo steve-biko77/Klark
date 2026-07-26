@@ -140,3 +140,9 @@ LINKEDIN_REDIRECT_URI = config('LINKEDIN_REDIRECT_URI', default='http://localhos
 
 # Chiffrement Fernet — clé dev par défaut (32 octets nuls en base64), à changer en prod
 ENCRYPTION_KEY = config('ENCRYPTION_KEY', default='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=')
+
+# Score d'influence (SCRUM-37) — pondérations modifiables, doivent sommer à 1.0
+INFLUENCE_WEIGHT_POSTS = 0.3
+INFLUENCE_WEIGHT_ENGAGEMENT = 0.4
+INFLUENCE_WEIGHT_STREAK = 0.3
+INFLUENCE_SCORE_MAX = 1000

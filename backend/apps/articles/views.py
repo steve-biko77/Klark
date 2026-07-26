@@ -7,7 +7,10 @@ from rest_framework import status
 from apps.authentication.models import Profile
 from .models import Alert, Article, DailyBriefing, Notification
 from .serializers import AlertSerializer, ArticleSerializer, DailyBriefingSerializer, NotificationSerializer
-from .services import generate_daily_briefing, maybe_send_daily_digest, verify_unsubscribe_token
+from .services import (
+    generate_daily_briefing, maybe_send_daily_digest, verify_unsubscribe_token,
+    maybe_send_weekly_digest, verify_weekly_unsubscribe_token,
+)
 
 MAX_ACTIVE_ALERTS = 10
 
@@ -159,4 +162,31 @@ class UnsubscribeDigestView(APIView):
             return Response({'error': 'Lien invalide ou expiré'}, status=status.HTTP_400_BAD_REQUEST)
 
         Profile.objects.filter(user_id=user_id).update(email_digest=False)
+        return Response({'unsubscribed': True})
+
+
+class SendWeeklyDigestView(APIView):
+    """Déclenchement manuel de l'envoi du digest hebdomadaire (SCRUM-40) —
+    déviation assumée : le prompt technique décrit un envoi automatique chaque
+    lundi 8h via Celery Beat, non disponible (SCRUM-22 en cours ailleurs)."""
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        sent = maybe_send_weekly_digest(request.user)
+        return Response({'sent': sent})
+
+
+class UnsubscribeWeeklyDigestView(APIView):
+    """Lien de désabonnement spécifique au digest hebdomadaire — jeton distinct
+    de celui du digest matinal (SCRUM-32), pas d'authentification requise."""
+    permission_classes = []
+    authentication_classes = []
+
+    def get(self, request):
+        token = request.query_params.get('token', '')
+        user_id = verify_weekly_unsubscribe_token(token) if token else None
+        if not user_id:
+            return Response({'error': 'Lien invalide ou expiré'}, status=status.HTTP_400_BAD_REQUEST)
+
+        Profile.objects.filter(user_id=user_id).update(weekly_digest=False)
         return Response({'unsubscribed': True})

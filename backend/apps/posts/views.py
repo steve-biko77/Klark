@@ -23,7 +23,10 @@ from apps.authentication.models import Profile
 from apps.sources.models import Source
 from .models import Post, LinkedInToken
 from .serializers import PostSerializer
-from .services import apply_ai_command, generate_post
+from .services import (
+    apply_ai_command, generate_post,
+    collect_analytics_for_user, get_analytics_overview, compute_format_recommendations,
+)
 from .encryption import encrypt
 
 MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024
@@ -391,6 +394,30 @@ class LinkedInCallbackView(APIView):
             return HttpResponseRedirect(error_url)
 
         return HttpResponseRedirect(f'{settings.FRONTEND_URL}/settings?linkedin=connected')
+
+
+# ── Analytics (SCRUM-36, SCRUM-38) ───────────────────────────────────────────
+
+class AnalyticsCollectView(APIView):
+    """Déclenchement manuel de la collecte des analytics LinkedIn (déviation
+    assumée : la tâche Celery Beat 24h décrite dans le prompt technique n'est
+    pas disponible tant que SCRUM-22 n'est pas mergé)."""
+
+    def post(self, request):
+        collected = collect_analytics_for_user(request.user)
+        return Response({'collected': collected})
+
+
+class AnalyticsOverviewView(APIView):
+
+    def get(self, request):
+        return Response(get_analytics_overview(request.user))
+
+
+class AnalyticsRecommendationsView(APIView):
+
+    def get(self, request):
+        return Response(compute_format_recommendations(request.user))
 
 
 class LinkedInStatusView(APIView):

@@ -2,11 +2,15 @@ from django.contrib import admin
 from django.urls import path, include
 from django.http import JsonResponse
 
-from apps.authentication.views import DashboardStatsView, ProfileView
+from apps.authentication.views import (
+    DashboardStatsView, ProfileView, GamificationView, LearnStyleView, ResetStyleView,
+)
 from apps.articles.views import (
     AlertListCreateView, AlertDetailView, NotificationListView, NotificationMarkReadView,
     TodayBriefingView, BriefingListView, BriefingMarkReadView, SendDigestView, UnsubscribeDigestView,
+    SendWeeklyDigestView, UnsubscribeWeeklyDigestView,
 )
+from apps.posts.views import AnalyticsCollectView, AnalyticsOverviewView, AnalyticsRecommendationsView
 
 
 def health(request):
@@ -31,4 +35,12 @@ urlpatterns = [
     path('briefings/unsubscribe/', UnsubscribeDigestView.as_view(), name='briefing-unsubscribe'),
     path('briefings/', BriefingListView.as_view(), name='briefings-list'),
     path('briefings/<int:briefing_id>/read/', BriefingMarkReadView.as_view(), name='briefing-read'),
+    path('briefings/send-weekly-digest/', SendWeeklyDigestView.as_view(), name='briefing-send-weekly-digest'),
+    path('briefings/unsubscribe-weekly/', UnsubscribeWeeklyDigestView.as_view(), name='briefing-unsubscribe-weekly'),
+    path('gamification/', GamificationView.as_view(), name='gamification'),
+    path('profile/learn-style/', LearnStyleView.as_view(), name='profile-learn-style'),
+    path('profile/reset-style/', ResetStyleView.as_view(), name='profile-reset-style'),
+    path('analytics/', AnalyticsOverviewView.as_view(), name='analytics-overview'),
+    path('analytics/collect/', AnalyticsCollectView.as_view(), name='analytics-collect'),
+    path('analytics/recommendations/', AnalyticsRecommendationsView.as_view(), name='analytics-recommendations'),
 ]

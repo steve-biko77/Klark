@@ -16,14 +16,16 @@ export default function UnsubscribePage() {
 function UnsubscribeContent() {
   const searchParams = useSearchParams()
   const token = searchParams.get('token')
+  const isWeekly = searchParams.get('type') === 'weekly'
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>(token ? 'loading' : 'error')
 
   useEffect(() => {
     if (!token) return
-    fetch(`${BASE_URL}/briefings/unsubscribe/?token=${encodeURIComponent(token)}`)
+    const path = isWeekly ? '/briefings/unsubscribe-weekly/' : '/briefings/unsubscribe/'
+    fetch(`${BASE_URL}${path}?token=${encodeURIComponent(token)}`)
       .then(res => setStatus(res.ok ? 'success' : 'error'))
       .catch(() => setStatus('error'))
-  }, [token])
+  }, [token, isWeekly])
 
   return (
     <div className="flex min-h-screen items-center justify-center">
@@ -33,7 +35,11 @@ function UnsubscribeContent() {
           <>
             <div className="text-4xl mb-4">✅</div>
             <h1 className="text-xl font-bold text-gray-900 mb-2">Désabonnement confirmé</h1>
-            <p className="text-gray-500">Tu ne recevras plus le digest email matinal de Klark.</p>
+            <p className="text-gray-500">
+              {isWeekly
+                ? 'Tu ne recevras plus le bilan hebdomadaire de Klark.'
+                : 'Tu ne recevras plus le digest email matinal de Klark.'}
+            </p>
           </>
         )}
         {status === 'error' && (

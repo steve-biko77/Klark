@@ -230,6 +230,15 @@ export default function PostsPage() {
                     Reprogrammer
                   </button>
                 )}
+                {post.status === 'published' && (
+                  <Link
+                    href="/analytics"
+                    title="Voir les analytics"
+                    className="text-xs border border-gray-200 text-gray-600 px-3 py-1 rounded-full hover:bg-gray-50 transition"
+                  >
+                    📊 Analytics
+                  </Link>
+                )}
               </div>
             </div>
           </div>
