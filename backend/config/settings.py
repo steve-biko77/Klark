@@ -146,3 +146,9 @@ INFLUENCE_WEIGHT_POSTS = 0.3
 INFLUENCE_WEIGHT_ENGAGEMENT = 0.4
 INFLUENCE_WEIGHT_STREAK = 0.3
 INFLUENCE_SCORE_MAX = 1000
+
+# Worker Celery + Redis — publication automatique (SCRUM-22)
+CELERY_BROKER_URL = config('REDIS_URL', default='redis://localhost:6379/0')
+CELERY_RESULT_BACKEND = config('REDIS_URL', default='redis://localhost:6379/0')
+CELERY_TIMEZONE = 'Europe/Paris'
+CELERY_TASK_SERIALIZER = 'json'

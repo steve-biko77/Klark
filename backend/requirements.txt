@@ -9,3 +9,5 @@ feedparser==6.0.12
 anthropic==0.94.1
 cryptography==44.0.3
 pymupdf==1.28.0
+celery==5.5.3
+redis==5.0.1

@@ -25,6 +25,7 @@ class Post(models.Model):
     scheduled_at = models.DateTimeField(null=True, blank=True)
     published_at = models.DateTimeField(null=True, blank=True)
     post_urn = models.TextField(null=True, blank=True)
+    celery_task_id = models.CharField(max_length=255, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

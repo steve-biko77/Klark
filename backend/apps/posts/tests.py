@@ -206,6 +206,108 @@ class ScheduleEndpointTest(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
+    @patch('apps.posts.views.publish_post_task')
+    def test_schedule_enqueues_celery_task_with_eta(self, mock_task):
+        mock_task.apply_async.return_value.id = 'task-abc-123'
+        post = Post.objects.create(user=self.user, content='Post', platform='linkedin')
+        future = (timezone.now() + timedelta(days=1)).isoformat()
+
+        self.client.patch(f'/posts/{post.id}/schedule/', {'scheduled_at': future}, format='json')
+
+        mock_task.apply_async.assert_called_once()
+        call_kwargs = mock_task.apply_async.call_args.kwargs
+        self.assertEqual(call_kwargs['args'], [post.id])
+        self.assertIsNotNone(call_kwargs['eta'])
+        post.refresh_from_db()
+        self.assertEqual(post.celery_task_id, 'task-abc-123')
+
+    @patch('apps.posts.views.AsyncResult')
+    @patch('apps.posts.views.publish_post_task')
+    def test_reschedule_revokes_old_task_and_enqueues_new_one(self, mock_task, mock_async_result):
+        mock_task.apply_async.return_value.id = 'task-new-456'
+        slot = timezone.now() + timedelta(days=1)
+        post = Post.objects.create(
+            user=self.user, content='Post', platform='linkedin',
+            status='scheduled', scheduled_at=slot, celery_task_id='task-old-123',
+        )
+        new_slot = (slot + timedelta(days=1)).isoformat()
+
+        self.client.patch(f'/posts/{post.id}/schedule/', {'scheduled_at': new_slot}, format='json')
+
+        mock_async_result.assert_called_once_with('task-old-123')
+        mock_async_result.return_value.revoke.assert_called_once_with(terminate=True)
+        post.refresh_from_db()
+        self.assertEqual(post.celery_task_id, 'task-new-456')
+
+    @patch('apps.posts.views.publish_post_task')
+    def test_schedule_still_succeeds_if_broker_unreachable(self, mock_task):
+        mock_task.apply_async.side_effect = Exception('Connection refused')
+        post = Post.objects.create(user=self.user, content='Post', platform='linkedin')
+        future = (timezone.now() + timedelta(days=1)).isoformat()
+
+        response = self.client.patch(f'/posts/{post.id}/schedule/', {'scheduled_at': future}, format='json')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['status'], 'scheduled')
+
+
+class PostCancelRetryEndpointTest(APITestCase):
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='cancelretryuser', password='pass')
+        self.client.force_authenticate(user=self.user)
+
+    @patch('apps.posts.views.AsyncResult')
+    def test_cancel_scheduled_post_reverts_to_draft(self, mock_async_result):
+        post = Post.objects.create(
+            user=self.user, content='Post', platform='linkedin', status='scheduled',
+            scheduled_at=timezone.now() + timedelta(days=1), celery_task_id='task-123',
+        )
+
+        response = self.client.post(f'/posts/{post.id}/cancel/')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        mock_async_result.assert_called_once_with('task-123')
+        mock_async_result.return_value.revoke.assert_called_once_with(terminate=True)
+        post.refresh_from_db()
+        self.assertEqual(post.status, 'draft')
+        self.assertIsNone(post.scheduled_at)
+        self.assertIsNone(post.celery_task_id)
+
+    def test_cancel_non_scheduled_post_returns_404(self):
+        post = Post.objects.create(user=self.user, content='Post', platform='linkedin', status='draft')
+        response = self.client.post(f'/posts/{post.id}/cancel/')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_cancel_other_user_post_returns_404(self):
+        other = User.objects.create_user(username='other6', password='pass')
+        post = Post.objects.create(
+            user=other, content='Post', platform='linkedin', status='scheduled',
+            scheduled_at=timezone.now() + timedelta(days=1),
+        )
+        response = self.client.post(f'/posts/{post.id}/cancel/')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    @patch('apps.posts.views.publish_post_task')
+    def test_retry_failed_post_enqueues_immediate_task(self, mock_task):
+        mock_task.apply_async.return_value.id = 'task-retry-789'
+        post = Post.objects.create(user=self.user, content='Post', platform='linkedin', status='failed')
+
+        response = self.client.post(f'/posts/{post.id}/retry/')
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        call_kwargs = mock_task.apply_async.call_args.kwargs
+        self.assertEqual(call_kwargs['args'], [post.id])
+        self.assertNotIn('eta', call_kwargs)
+        post.refresh_from_db()
+        self.assertEqual(post.status, 'scheduled')
+        self.assertEqual(post.celery_task_id, 'task-retry-789')
+
+    def test_retry_non_failed_post_returns_404(self):
+        post = Post.objects.create(user=self.user, content='Post', platform='linkedin', status='draft')
+        response = self.client.post(f'/posts/{post.id}/retry/')
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
 
 @override_settings(LINKEDIN_CLIENT_ID='mock')
 class LinkedInOAuthTest(APITestCase):

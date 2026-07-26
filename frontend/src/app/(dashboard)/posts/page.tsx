@@ -90,6 +90,27 @@ export default function PostsPage() {
     setModal(post)
   }
 
+  async function handleCancel(post: Post) {
+    if (!confirm('Annuler cette programmation ?')) return
+    const token = getToken()
+    try {
+      await apiFetch(`/posts/${post.id}/cancel/`, token!, { method: 'POST' })
+      await loadPosts()
+    } catch {
+      alert('Erreur lors de l\'annulation')
+    }
+  }
+
+  async function handleRetry(post: Post) {
+    const token = getToken()
+    try {
+      await apiFetch(`/posts/${post.id}/retry/`, token!, { method: 'POST' })
+      await loadPosts()
+    } catch {
+      alert('Erreur lors de la nouvelle tentative')
+    }
+  }
+
   async function handleSchedule(force = false) {
     if (!modal || !schedDate || !schedTime) return
     setScheduling(true)
@@ -229,6 +250,30 @@ export default function PostsPage() {
                   >
                     Reprogrammer
                   </button>
+                )}
+                {post.status === 'scheduled' && (
+                  <button
+                    onClick={() => handleCancel(post)}
+                    className="text-xs bg-red-50 text-red-500 border border-red-200 px-3 py-1 rounded-full hover:bg-red-100 transition"
+                  >
+                    Annuler
+                  </button>
+                )}
+                {post.status === 'failed' && (
+                  <>
+                    <button
+                      onClick={() => handleRetry(post)}
+                      className="text-xs bg-indigo-600 text-white px-3 py-1 rounded-full hover:bg-indigo-700 transition"
+                    >
+                      Réessayer
+                    </button>
+                    <button
+                      onClick={() => openModal(post)}
+                      className="text-xs border border-gray-200 text-gray-600 px-3 py-1 rounded-full hover:bg-gray-50 transition"
+                    >
+                      Reprogrammer
+                    </button>
+                  </>
                 )}
                 {post.status === 'published' && (
                   <Link

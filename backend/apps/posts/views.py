@@ -4,6 +4,7 @@ import secrets
 import urllib.parse
 import urllib.request
 
+from celery.result import AsyncResult
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.cache import cache
@@ -28,6 +29,7 @@ from .services import (
     collect_analytics_for_user, get_analytics_overview, compute_format_recommendations,
 )
 from .encryption import encrypt
+from .tasks import publish_post_task
 
 MAX_PDF_SIZE_BYTES = 10 * 1024 * 1024
 MAX_TEXT_CHARS = 10_000
@@ -239,6 +241,31 @@ class PostCalendarView(APIView):
         return Response(result)
 
 
+def _revoke_task(task_id: str) -> None:
+    if not task_id:
+        return
+    try:
+        AsyncResult(task_id).revoke(terminate=True)
+    except Exception:
+        pass  # broker indisponible — la tâche expirera ou sera ignorée par publish_post_task
+
+
+def _enqueue_publish(post, eta=None) -> None:
+    """Révoque une éventuelle tâche existante puis programme la publication.
+    Dégrade proprement si le broker Redis est injoignable (dev sans Redis
+    lancé) : la programmation elle-même reste valide, seul l'enqueue échoue."""
+    _revoke_task(post.celery_task_id)
+    try:
+        kwargs = {'args': [post.id]}
+        if eta is not None:
+            kwargs['eta'] = eta
+        result = publish_post_task.apply_async(**kwargs)
+        post.celery_task_id = result.id
+        post.save(update_fields=['celery_task_id'])
+    except Exception:
+        pass
+
+
 class PostScheduleView(APIView):
 
     CONFLICT_WINDOW_MINUTES = 30
@@ -291,6 +318,39 @@ class PostScheduleView(APIView):
         post.scheduled_at = aware_dt
         post.status = 'scheduled'
         post.save()
+
+        _enqueue_publish(post, eta=aware_dt)
+
+        return Response(PostSerializer(post).data)
+
+
+class PostCancelView(APIView):
+    """Annule un post scheduled : révoque la tâche Celery et repasse en
+    draft (SCRUM-23)."""
+
+    def post(self, request, post_id):
+        post = get_object_or_404(Post, id=post_id, user=request.user, status='scheduled')
+
+        _revoke_task(post.celery_task_id)
+        post.status = 'draft'
+        post.scheduled_at = None
+        post.celery_task_id = None
+        post.save()
+
+        return Response(PostSerializer(post).data)
+
+
+class PostRetryView(APIView):
+    """Relance immédiatement la publication d'un post failed (SCRUM-23)."""
+
+    def post(self, request, post_id):
+        post = get_object_or_404(Post, id=post_id, user=request.user, status='failed')
+
+        post.status = 'scheduled'
+        post.scheduled_at = timezone.now()
+        post.save()
+
+        _enqueue_publish(post)
 
         return Response(PostSerializer(post).data)
 
