@@ -136,6 +136,16 @@ class MaybeSendWeeklyDigestTest(TestCase):
         self.assertTrue(sent)
         self.assertIn('Aucun post publié cette semaine', mail.outbox[0].alternatives[0][0])
 
+    @patch('apps.articles.services.anthropic.Anthropic')
+    def test_ai_failure_on_recommendation_still_sends_email(self, mock_anthropic_cls):
+        mock_anthropic_cls.side_effect = Exception('Error code: 401 - invalid x-api-key')
+        Profile.objects.create(user=self.user, persona='CREATEUR', tone='EXPERT', weekly_digest=True)
+
+        sent = maybe_send_weekly_digest(self.user)
+
+        self.assertTrue(sent)
+        self.assertEqual(len(mail.outbox), 1)
+
 
 class SendWeeklyDigestViewTest(APITestCase):
 

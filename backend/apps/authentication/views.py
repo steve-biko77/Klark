@@ -307,7 +307,13 @@ class LearnStyleView(APIView):
     def post(self, request):
         from apps.posts.services import update_style_memory
 
-        profile = update_style_memory(request.user)
+        try:
+            profile = update_style_memory(request.user)
+        except Exception:
+            return Response(
+                {'error': "Le service de génération IA est momentanément indisponible. Réessayez."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         if profile is None:
             return Response({'updated': False, 'message': 'Pas assez de posts publiés (minimum 5).'})
         return Response({'updated': True, **ProfileSerializer(profile).data})

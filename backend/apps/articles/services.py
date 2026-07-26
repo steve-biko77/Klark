@@ -356,7 +356,10 @@ def maybe_send_weekly_digest(user) -> bool:
         return False
 
     stats = gather_weekly_stats(user)
-    recommendation = _weekly_recommendation(stats, user.id)
+    try:
+        recommendation = _weekly_recommendation(stats, user.id)
+    except Exception:
+        recommendation = "Continuez sur cette lancée — consultez /analytics pour plus d'insights sur ce qui fonctionne pour vous."
     unsubscribe_url = (
         f"{settings.FRONTEND_URL}/unsubscribe?type=weekly&token={make_weekly_unsubscribe_token(user.id)}"
     )

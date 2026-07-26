@@ -111,6 +111,15 @@ class LearnStyleViewTest(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertFalse(response.data['updated'])
 
+    @patch('apps.posts.services.update_style_memory')
+    def test_ai_failure_returns_503_not_500(self, mock_update):
+        mock_update.side_effect = Exception('Error code: 401 - invalid x-api-key')
+
+        response = self.client.post('/profile/learn-style/')
+
+        self.assertEqual(response.status_code, status.HTTP_503_SERVICE_UNAVAILABLE)
+        self.assertIn('error', response.data)
+
 
 class ResetStyleViewTest(APITestCase):
 
